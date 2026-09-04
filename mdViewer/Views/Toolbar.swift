@@ -4,7 +4,6 @@ struct Toolbar: View {
     @Binding var mode: ViewMode
     @Binding var isSidebarVisible: Bool
     @ObservedObject var store: DocumentStore
-    var onExportPDF: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -15,34 +14,55 @@ struct Toolbar: View {
             if store.folderURL != nil {
                 Button(action: { withAnimation(.easeInOut(duration: 0.15)) { isSidebarVisible.toggle() } }) {
                     Label("Toggle Sidebar", systemImage: "sidebar.left")
+                        .labelStyle(.iconOnly)
                 }
+                .help("Toggle Sidebar (⌘\\)")
             }
 
             Spacer()
+        }
+    }
+}
+
+struct StatusBar: View {
+    @ObservedObject var store: DocumentStore
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "doc.text")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+            Text(store.fileURL?.lastPathComponent ?? "Untitled")
+                .font(.caption)
+                .lineLimit(1)
+
+            if let folderName = store.folderURL?.lastPathComponent {
+                Text("· \(folderName)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Spacer(minLength: 12)
 
             if !store.text.isEmpty {
                 Text(DocumentStats.summary(for: store.text))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .help("Word count and estimated reading time")
+                Text("·")
+                    .foregroundStyle(.tertiary)
             }
 
             Text(store.status)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-
-            Spacer()
-
-            Button("Open", action: { store.openFile() })
-
-            Button("Open Folder", action: { store.openFolder() })
-
-            Button("Save", action: { store.save() })
-                .disabled(store.fileURL == nil && store.text.isEmpty)
-
-            Button("Export PDF", action: onExportPDF)
-                .disabled(store.text.isEmpty)
+                .truncationMode(.middle)
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 4)
+        .background(Color(NSColor.controlBackgroundColor))
     }
 }

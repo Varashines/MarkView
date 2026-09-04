@@ -142,6 +142,10 @@ final class DocumentStore: ObservableObject {
     }
     
     func save() {
+        if fileURL == nil && text.isEmpty {
+            status = "Nothing to save"
+            return
+        }
         guard let url = fileURL else {
             saveAs()
             return

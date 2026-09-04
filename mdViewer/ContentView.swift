@@ -17,8 +17,7 @@ struct ContentView: View {
             Toolbar(
                 mode: $mode,
                 isSidebarVisible: $isSidebarVisible,
-                store: store,
-                onExportPDF: exportPDF
+                store: store
             )
             .padding(.horizontal)
             .padding(.vertical, 8)
@@ -63,6 +62,10 @@ struct ContentView: View {
                     }
                 }
             }
+
+            Divider()
+
+            StatusBar(store: store)
         }
         .frame(minWidth: 600, minHeight: 400)
         .navigationTitle(store.fileURL?.lastPathComponent ?? "Untitled")
