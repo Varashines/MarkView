@@ -4,7 +4,8 @@ enum MarkdownConverter {
     static func html(from markdown: String) -> String {
         let body = render(markdown)
         let css = Self.css()
-        let script = Self.script()
+        let hasMermaid = body.contains("<div class=\"mermaid\">")
+        let scripts = Self.scripts(hasMermaid: hasMermaid)
         return """
         <!DOCTYPE html>
         <html>
@@ -14,7 +15,7 @@ enum MarkdownConverter {
         <style>\(css)</style>
         </head>
         <body>\(body)</body>
-        <script>\(script)</script>
+        \(scripts)
         </html>
         """
     }
@@ -32,7 +33,11 @@ enum MarkdownConverter {
             if rawLine.hasPrefix("```") {
                 if inCodeBlock {
                     let code = codeBuffer.dropFirst().joined(separator: "\n")
-                    result.append("<pre><code>\(code)</code></pre>")
+                    if fenceLanguage(codeBuffer.first ?? "") == "mermaid" {
+                        result.append("<div class=\"mermaid\">\(code)</div>")
+                    } else {
+                        result.append("<pre><code>\(code)</code></pre>")
+                    }
                     codeBuffer = []
                     inCodeBlock = false
                 } else {
@@ -149,10 +154,20 @@ enum MarkdownConverter {
         
         if inCodeBlock {
             let code = codeBuffer.dropFirst().joined(separator: "\n")
-            result.append("<pre><code>\(code)</code></pre>")
+            if fenceLanguage(codeBuffer.first ?? "") == "mermaid" {
+                result.append("<div class=\"mermaid\">\(code)</div>")
+            } else {
+                result.append("<pre><code>\(code)</code></pre>")
+            }
         }
-        
+
         return result.joined(separator: "\n")
+    }
+
+    private static func fenceLanguage(_ openingFence: String) -> String {
+        let info = String(openingFence.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+        let name = info.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true).first
+        return name.map { $0.lowercased() } ?? ""
     }
     
     private static func parseHeader(_ line: String) -> String? {
@@ -303,6 +318,49 @@ enum MarkdownConverter {
         return css
     }
     
+    private static func scripts(hasMermaid: Bool) -> String {
+        var scripts = "<script>\(script())</script>"
+        guard hasMermaid else { return scripts }
+        if let library = mermaidLibrary() {
+            scripts += "<script>\(library)</script>"
+            scripts += "<script>\(mermaidInitScript())</script>"
+        } else {
+            scripts += "<script>window.__mermaidDone = true;</script>"
+        }
+        return scripts
+    }
+
+    private static func mermaidLibrary() -> String? {
+        guard let url = Bundle.main.url(forResource: "mermaid.min", withExtension: "js"),
+              let js = try? String(contentsOf: url, encoding: .utf8) else {
+            return nil
+        }
+        return js
+    }
+
+    private static func mermaidInitScript() -> String {
+        """
+        window.__mermaidDone = false;
+        (function() {
+            var blocks = document.querySelectorAll('div.mermaid');
+            var complete = function() {
+                window.__mermaidDone = true;
+                if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.mermaidDone) {
+                    window.webkit.messageHandlers.mermaidDone.postMessage('');
+                }
+            };
+            if (!window.mermaid || !blocks.length) { complete(); return; }
+            var dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            try {
+                mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default' });
+                mermaid.run({ nodes: blocks }).then(complete).catch(complete);
+            } catch (e) {
+                complete();
+            }
+        })();
+        """
+    }
+
     private static func script() -> String {
         """
         document.addEventListener('DOMContentLoaded', function() {

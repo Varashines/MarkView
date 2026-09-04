@@ -10,6 +10,7 @@ struct MarkdownPreview: NSViewRepresentable {
         let config = WKWebViewConfiguration()
         config.userContentController.add(context.coordinator, name: "copyCode")
         config.userContentController.add(context.coordinator, name: "toggleTask")
+        config.userContentController.add(context.coordinator, name: "mermaidDone")
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.isInspectable = false
         webView.navigationDelegate = context.coordinator
@@ -66,6 +67,10 @@ struct MarkdownPreview: NSViewRepresentable {
                 skipNextLoad = true
                 webView.evaluateJavaScript("document.querySelector('input[data-line=\"\(line)\"]').checked = \(checked)")
                 parent.onToggleTask?(line, checked)
+            case "mermaidDone":
+                let y = savedScrollY
+                guard y > 0, let webView = webView else { return }
+                webView.evaluateJavaScript("window.scrollTo(0, \(y))")
             default:
                 break
             }
