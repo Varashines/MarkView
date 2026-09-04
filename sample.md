@@ -61,6 +61,31 @@ sequenceDiagram
     W-->>U: Show preview
 ```
 
+## Lists & Links
+
+Nested lists are supported:
+
+- Top level item
+  - Nested item
+    - Even deeper
+  - Another nested item
+- Back to top level
+
+1. First
+2. Second
+   1. Nested ordered item
+   2. Another one
+3. Third
+
+Task nesting works too:
+
+- [x] Ship markdown viewer
+- [ ] Add syntax highlighting
+  - [x] Bundle highlight.js
+  - [ ] Add editor highlighting
+
+Bare URLs autolink: https://swift.org and https://github.com.
+
 > This is a blockquote with a **bold** statement.
 
 ---

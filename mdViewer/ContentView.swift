@@ -33,7 +33,7 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color(NSColor.textBackgroundColor))
                 } else {
-                    MarkdownPreview(text: store.text, onToggleTask: { line, checked in
+                    MarkdownPreview(text: store.text, documentURL: store.fileURL, onToggleTask: { line, checked in
                         var lines = store.text.components(separatedBy: .newlines)
                         guard line >= 0, line < lines.count else { return }
                         let current = lines[line]
@@ -76,6 +76,6 @@ struct ContentView: View {
         }
         let html = MarkdownConverter.html(from: store.text)
         let window = NSApp.keyWindow
-        PDFExporter.export(from: html, window: window)
+        PDFExporter.export(from: html, window: window, resourceBase: store.fileURL?.deletingLastPathComponent())
     }
 }

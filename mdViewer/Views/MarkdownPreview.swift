@@ -4,21 +4,26 @@ import AppKit
 
 struct MarkdownPreview: NSViewRepresentable {
     let text: String
+    var documentURL: URL?
     var onToggleTask: ((Int, Bool) -> Void)?
 
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
+        let resourceHandler = DocumentResourceHandler()
+        config.setURLSchemeHandler(resourceHandler, forURLScheme: DocumentResourceHandler.scheme)
         config.userContentController.add(context.coordinator, name: "copyCode")
         config.userContentController.add(context.coordinator, name: "toggleTask")
-        config.userContentController.add(context.coordinator, name: "mermaidDone")
+        config.userContentController.add(context.coordinator, name: "contentDone")
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.isInspectable = false
         webView.navigationDelegate = context.coordinator
         context.coordinator.webView = webView
+        context.coordinator.resourceHandler = resourceHandler
         return webView
     }
 
     func updateNSView(_ nsView: WKWebView, context: Context) {
+        context.coordinator.resourceHandler?.baseURL = documentURL?.deletingLastPathComponent()
         guard context.coordinator.lastMarkdownText != text else { return }
         if context.coordinator.skipNextLoad {
             context.coordinator.skipNextLoad = false
@@ -47,6 +52,7 @@ struct MarkdownPreview: NSViewRepresentable {
         var skipNextLoad = false
         var lastMarkdownText: String?
         weak var webView: WKWebView?
+        var resourceHandler: DocumentResourceHandler?
         private var restoredVersion: UInt = 0
 
         init(parent: MarkdownPreview) {
@@ -67,7 +73,7 @@ struct MarkdownPreview: NSViewRepresentable {
                 skipNextLoad = true
                 webView.evaluateJavaScript("document.querySelector('input[data-line=\"\(line)\"]').checked = \(checked)")
                 parent.onToggleTask?(line, checked)
-            case "mermaidDone":
+            case "contentDone":
                 let y = savedScrollY
                 guard y > 0, let webView = webView else { return }
                 webView.evaluateJavaScript("window.scrollTo(0, \(y))")
