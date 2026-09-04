@@ -22,6 +22,7 @@ struct ContentView: View {
 
     var body: some View {
         mainLayout
+            .background(WindowChrome(colorScheme: colorScheme))
             .frame(minWidth: 600, minHeight: 400)
             .overlay(alignment: .bottomTrailing) {
                 StatusBar(store: store)
