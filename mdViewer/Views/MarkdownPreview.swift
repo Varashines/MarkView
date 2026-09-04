@@ -92,5 +92,42 @@ struct MarkdownPreview: NSViewRepresentable {
                 webView.evaluateJavaScript("window.scrollTo(0, \(y))")
             }
         }
+
+        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            guard navigationAction.navigationType == .linkActivated,
+                  let url = navigationAction.request.url else {
+                decisionHandler(.allow)
+                return
+            }
+
+            let scheme = url.scheme?.lowercased()
+
+            if url.fragment != nil, url.host == nil, scheme == nil || scheme == "about" {
+                decisionHandler(.allow)
+                return
+            }
+
+            switch scheme {
+            case "http", "https", "mailto":
+                NSWorkspace.shared.open(url)
+                decisionHandler(.cancel)
+            case nil:
+                openRelativeLink(url)
+                decisionHandler(.cancel)
+            default:
+                decisionHandler(.cancel)
+            }
+        }
+
+        private func openRelativeLink(_ url: URL) {
+            guard let base = resourceHandler?.baseURL else { return }
+            let target = base.appendingPathComponent(url.path).standardizedFileURL
+            let ext = target.pathExtension.lowercased()
+            if ["md", "markdown", "txt"].contains(ext) {
+                NotificationCenter.default.post(name: .openFileURL, object: target)
+            } else {
+                NSWorkspace.shared.open(target)
+            }
+        }
     }
 }

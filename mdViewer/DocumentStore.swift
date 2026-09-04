@@ -14,7 +14,20 @@ enum DocumentStats {
         } else {
             reading = "\(Int(minutes.rounded())) min"
         }
-        return "\(words) words · \(reading) read"
+        return "\(grouped(words)) words · \(reading) read"
+    }
+
+    static func grouped(_ number: Int) -> String {
+        let digits = String(number)
+        guard digits.count > 3 else { return digits }
+        var grouped = ""
+        for (index, digit) in digits.reversed().enumerated() {
+            if index > 0, index % 3 == 0 {
+                grouped.insert(",", at: grouped.startIndex)
+            }
+            grouped.insert(digit, at: grouped.startIndex)
+        }
+        return grouped
     }
 }
 
@@ -127,7 +140,7 @@ enum FolderScanner {
         }
 
         return entries.sorted {
-            $0.relativePath.localizedCaseInsensitiveCompare($1.relativePath) == .orderedAscending
+            $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending
         }
     }
 }
