@@ -52,19 +52,26 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 600, minHeight: 400)
-        .overlay(alignment: .topTrailing) {
-            Toolbar(
-                mode: $mode,
-                isSidebarVisible: $isSidebarVisible,
-                store: store
-            )
-            .padding(.top, 10)
-            .padding(.trailing, 14)
-        }
         .overlay(alignment: .bottomTrailing) {
             StatusBar(store: store)
                 .padding(.bottom, 12)
                 .padding(.trailing, 14)
+        }
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                if store.folderURL != nil {
+                    Button(action: { withAnimation(.easeInOut(duration: 0.15)) { isSidebarVisible.toggle() } }) {
+                        Image(systemName: "sidebar.left")
+                    }
+                    .help("Toggle Sidebar (⌘\\)")
+                }
+            }
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button(action: { withAnimation(.easeInOut(duration: 0.15)) { mode = mode == .preview ? .edit : .preview } }) {
+                    Label(mode == .preview ? "Edit" : "Preview", systemImage: mode == .preview ? "pencil" : "eye")
+                }
+                .help("Toggle Edit/Preview (⌘E)")
+            }
         }
         .navigationTitle(store.fileURL?.lastPathComponent ?? "Untitled")
         .navigationSubtitle(store.folderURL?.lastPathComponent ?? "")

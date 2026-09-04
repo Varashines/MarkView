@@ -112,7 +112,7 @@ final class DocumentStore: ObservableObject {
 
     func openFolder(at url: URL) {
         folderURL = url
-        status = "Folder: \(url.lastPathComponent)"
+        status = "Folder open"
         rescanFolder()
     }
 
@@ -134,7 +134,7 @@ final class DocumentStore: ObservableObject {
             text = try String(contentsOf: url, encoding: .utf8)
             fileURL = url
             isDirty = false
-            status = "Opened \(url.lastPathComponent)"
+            status = "Opened"
             onFileOpened?()
         } catch {
             status = "Failed to open: \(error.localizedDescription)"
@@ -167,7 +167,7 @@ final class DocumentStore: ObservableObject {
         do {
             try text.write(to: url, atomically: true, encoding: .utf8)
             isDirty = false
-            status = "Saved \(url.lastPathComponent)"
+            status = "Saved"
         } catch {
             status = "Failed to save: \(error.localizedDescription)"
         }
@@ -190,7 +190,7 @@ final class DocumentStore: ObservableObject {
     private func autosave() {
         guard let url = fileURL else { return }
         write(to: url)
-        status = "Autosaved \(url.lastPathComponent)"
+        status = "Autosaved"
     }
     
     private var allowedOpenTypes: [UTType] {
