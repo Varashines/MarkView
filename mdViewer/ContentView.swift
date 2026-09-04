@@ -67,9 +67,14 @@ struct ContentView: View {
                 }
             }
             ToolbarItemGroup(placement: .primaryAction) {
-                Button(action: { withAnimation(.easeInOut(duration: 0.15)) { mode = mode == .preview ? .edit : .preview } }) {
-                    Label(mode == .preview ? "Edit" : "Preview", systemImage: mode == .preview ? "pencil" : "eye")
+                Picker("View Mode", selection: modeBinding) {
+                    Label("Edit", systemImage: "pencil").tag(ViewMode.edit)
+                    Label("Preview", systemImage: "eye").tag(ViewMode.preview)
                 }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .controlSize(.small)
+                .frame(width: 150)
                 .help("Toggle Edit/Preview (⌘E)")
             }
         }
@@ -112,6 +117,13 @@ struct ContentView: View {
             isSidebarVisible: $isSidebarVisible,
             exportPDF: exportPDF
         ))
+    }
+
+    private var modeBinding: Binding<ViewMode> {
+        Binding(
+            get: { mode },
+            set: { newValue in withAnimation(.easeInOut(duration: 0.15)) { mode = newValue } }
+        )
     }
 
     private var textBinding: Binding<String> {
