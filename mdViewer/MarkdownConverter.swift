@@ -553,6 +553,18 @@ enum MarkdownConverter {
                 var code = pre.querySelector('code');
                 if (!code) return;
 
+                var header = document.createElement('div');
+                header.className = 'code-header';
+
+                var dots = document.createElement('span');
+                dots.className = 'traffic-dots';
+                ['red', 'yellow', 'green'].forEach(function(color) {
+                    var dot = document.createElement('span');
+                    dot.className = color;
+                    dots.appendChild(dot);
+                });
+                header.appendChild(dots);
+
                 var language = pre.getAttribute('data-lang') || '';
                 function idleText() {
                     return language ? language.toUpperCase() : 'Copy';
@@ -570,10 +582,15 @@ enum MarkdownConverter {
                         window.webkit.messageHandlers.copyCode.postMessage(text);
                     }
                     button.textContent = 'Copied';
+                    button.classList.add('copied');
                     setTimeout(function() {
+                        button.classList.remove('copied');
                         button.textContent = pre.matches(':hover') ? 'Copy' : idleText();
                     }, 1500);
                 });
+
+                header.appendChild(button);
+                pre.insertBefore(header, code);
 
                 pre.addEventListener('mouseenter', function() {
                     if (button.textContent !== 'Copied') { button.textContent = 'Copy'; }
@@ -582,9 +599,6 @@ enum MarkdownConverter {
                 pre.addEventListener('mouseleave', function() {
                     if (button.textContent !== 'Copied') { button.textContent = idleText(); }
                 });
-
-                pre.style.position = 'relative';
-                pre.appendChild(button);
             });
         });
 
