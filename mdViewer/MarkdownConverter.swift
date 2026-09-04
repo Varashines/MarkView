@@ -553,18 +553,6 @@ enum MarkdownConverter {
                 var code = pre.querySelector('code');
                 if (!code) return;
 
-                var header = document.createElement('div');
-                header.className = 'code-header';
-
-                var dots = document.createElement('span');
-                dots.className = 'traffic-dots';
-                ['red', 'yellow', 'green'].forEach(function(color) {
-                    var dot = document.createElement('span');
-                    dot.className = color;
-                    dots.appendChild(dot);
-                });
-                header.appendChild(dots);
-
                 var language = pre.getAttribute('data-lang') || '';
                 function idleText() {
                     return language ? language.toUpperCase() : 'Copy';
@@ -589,9 +577,6 @@ enum MarkdownConverter {
                     }, 1500);
                 });
 
-                header.appendChild(button);
-                pre.insertBefore(header, code);
-
                 pre.addEventListener('mouseenter', function() {
                     if (button.textContent !== 'Copied') { button.textContent = 'Copy'; }
                 });
@@ -599,6 +584,8 @@ enum MarkdownConverter {
                 pre.addEventListener('mouseleave', function() {
                     if (button.textContent !== 'Copied') { button.textContent = idleText(); }
                 });
+
+                pre.appendChild(button);
             });
         });
 
