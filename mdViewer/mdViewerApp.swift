@@ -3,8 +3,17 @@ import SwiftUI
 @main
 struct mdViewerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @AppStorage("appearanceMode") private var appearanceMode = "system"
     @AppStorage(RecentItems.filesKey) private var recentFilesData: Data = Data()
     @AppStorage(RecentItems.foldersKey) private var recentFoldersData: Data = Data()
+
+    private var colorSchemeOverride: ColorScheme? {
+        switch appearanceMode {
+        case "light": return .light
+        case "dark": return .dark
+        default: return nil
+        }
+    }
 
     private var recentFiles: [URL] {
         (try? JSONDecoder().decode([URL].self, from: recentFilesData)) ?? []
@@ -17,6 +26,7 @@ struct mdViewerApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .preferredColorScheme(colorSchemeOverride)
                 .onOpenURL { url in
                     NotificationCenter.default.post(
                         name: .openFileURL,
@@ -71,6 +81,13 @@ struct mdViewerApp: App {
                     .keyboardShortcut("\\", modifiers: .command)
                 Button("Toggle Edit/Preview") { post(.toggleModeRequested) }
                     .keyboardShortcut("e")
+                Divider()
+                Button("Zoom In") { post(.zoomInRequested) }
+                    .keyboardShortcut("+")
+                Button("Zoom Out") { post(.zoomOutRequested) }
+                    .keyboardShortcut("-")
+                Button("Actual Size") { post(.zoomResetRequested) }
+                    .keyboardShortcut("0")
             }
 
             CommandGroup(after: .textEditing) {
@@ -78,6 +95,37 @@ struct mdViewerApp: App {
                     .keyboardShortcut("f")
             }
         }
+
+        Settings {
+            SettingsView()
+        }
+    }
+}
+
+struct SettingsView: View {
+    @AppStorage("appearanceMode") private var appearanceMode = "system"
+    @AppStorage("editorFontSize") private var editorFontSize = 13.0
+
+    var body: some View {
+        Form {
+            Picker("Appearance", selection: $appearanceMode) {
+                Text("System").tag("system")
+                Text("Light").tag("light")
+                Text("Dark").tag("dark")
+            }
+            .pickerStyle(.radioGroup)
+
+            HStack {
+                Text("Editor font size")
+                Slider(value: $editorFontSize, in: 10...22, step: 1)
+                    .labelsHidden()
+                Text("\(Int(editorFontSize)) pt")
+                    .monospacedDigit()
+                    .frame(width: 44)
+            }
+        }
+        .padding(20)
+        .frame(width: 340)
     }
 }
 
@@ -106,5 +154,8 @@ extension Notification.Name {
     static let toggleSidebarRequested = Notification.Name("toggleSidebarRequested")
     static let toggleModeRequested = Notification.Name("toggleModeRequested")
     static let findRequested = Notification.Name("findRequested")
+    static let zoomInRequested = Notification.Name("zoomInRequested")
+    static let zoomOutRequested = Notification.Name("zoomOutRequested")
+    static let zoomResetRequested = Notification.Name("zoomResetRequested")
     static let performEditorFind = Notification.Name("performEditorFind")
 }

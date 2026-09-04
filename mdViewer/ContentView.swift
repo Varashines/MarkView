@@ -10,6 +10,8 @@ enum ViewMode {
 struct ContentView: View {
     @StateObject private var store = DocumentStore()
     @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("previewZoom") private var previewZoom = 1.0
+    @AppStorage("editorFontSize") private var editorFontSize = 13.0
     @State private var mode: ViewMode = .preview
     @State private var isSidebarVisible = false
     @State private var crossfade: Double = 0
@@ -70,6 +72,7 @@ struct ContentView: View {
                 mode: $mode,
                 toggleMode: toggleMode,
                 isSidebarVisible: $isSidebarVisible,
+                previewZoom: $previewZoom,
                 exportPDF: exportPDF
             ))
     }
@@ -110,7 +113,7 @@ struct ContentView: View {
     private var editorArea: some View {
         HStack(spacing: 0) {
             Spacer()
-            MarkdownEditor(text: textBinding)
+            MarkdownEditor(text: textBinding, fontSize: editorFontSize)
                 .frame(maxWidth: 800, maxHeight: .infinity)
             Spacer()
         }
@@ -122,6 +125,7 @@ struct ContentView: View {
         MarkdownPreview(
             text: store.text,
             documentURL: store.fileURL,
+            zoom: previewZoom,
             onToggleTask: { line, checked in
                 var lines = store.text.components(separatedBy: .newlines)
                 guard line >= 0, line < lines.count else { return }
@@ -207,6 +211,7 @@ private struct AppCommandHandlers: ViewModifier {
     @Binding var mode: ViewMode
     let toggleMode: () -> Void
     @Binding var isSidebarVisible: Bool
+    @Binding var previewZoom: Double
     let exportPDF: () -> Void
 
     func body(content: Content) -> some View {
@@ -246,6 +251,15 @@ private struct AppCommandHandlers: ViewModifier {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     NotificationCenter.default.post(name: .performEditorFind, object: nil)
                 }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .zoomInRequested)) { _ in
+                previewZoom = min(3.0, (previewZoom * 1.25 * 100).rounded() / 100)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .zoomOutRequested)) { _ in
+                previewZoom = max(0.5, (previewZoom / 1.25 * 100).rounded() / 100)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .zoomResetRequested)) { _ in
+                previewZoom = 1.0
             }
     }
 }

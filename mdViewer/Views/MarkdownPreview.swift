@@ -5,6 +5,7 @@ import AppKit
 struct MarkdownPreview: NSViewRepresentable {
     let text: String
     var documentURL: URL?
+    var zoom: Double = 1.0
     var onToggleTask: ((Int, Bool) -> Void)?
 
     func makeNSView(context: Context) -> WKWebView {
@@ -25,6 +26,9 @@ struct MarkdownPreview: NSViewRepresentable {
 
     func updateNSView(_ nsView: WKWebView, context: Context) {
         context.coordinator.resourceHandler?.baseURL = documentURL?.deletingLastPathComponent()
+        if nsView.pageZoom != zoom {
+            nsView.pageZoom = zoom
+        }
         guard context.coordinator.lastMarkdownText != text else { return }
         if context.coordinator.skipNextLoad {
             context.coordinator.skipNextLoad = false

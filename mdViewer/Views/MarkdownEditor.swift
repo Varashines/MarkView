@@ -3,6 +3,7 @@ import AppKit
 
 struct MarkdownEditor: NSViewRepresentable {
     @Binding var text: String
+    var fontSize: CGFloat = 13
 
     func makeNSView(context: Context) -> NSScrollView {
         let textView = LineNumberTextView()
@@ -12,7 +13,7 @@ struct MarkdownEditor: NSViewRepresentable {
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.usesFindBar = true
         textView.isIncrementalSearchingEnabled = true
-        textView.font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        textView.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         textView.textContainerInset = NSSize(width: 24, height: 20)
         textView.backgroundColor = .clear
         textView.drawsBackground = false
@@ -55,6 +56,13 @@ struct MarkdownEditor: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         guard let textView = nsView.documentView as? NSTextView else { return }
+        let font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        if textView.font != font {
+            textView.font = font
+            (nsView.verticalRulerView as? LineNumberRulerView)?.invalidateLineCount()
+            nsView.verticalRulerView?.needsDisplay = true
+            textView.needsDisplay = true
+        }
         if textView.string != text {
             textView.string = text
             (nsView.verticalRulerView as? LineNumberRulerView)?.invalidateLineCount()
