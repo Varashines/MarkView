@@ -13,61 +13,59 @@ struct ContentView: View {
     @State private var isSidebarVisible = false
 
     var body: some View {
-        VStack(spacing: 0) {
+        HStack(spacing: 0) {
+            if store.folderURL != nil && isSidebarVisible {
+                FolderSidebar(store: store)
+                    .frame(width: 230)
+                Divider()
+            }
+
+            Group {
+                if mode == .edit {
+                    HStack(spacing: 0) {
+                        Spacer()
+                        MarkdownEditor(text: textBinding)
+                            .frame(maxWidth: 800, maxHeight: .infinity)
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color(NSColor.textBackgroundColor))
+                } else if store.text.isEmpty {
+                    EmptyStateView(
+                        onOpenFile: { store.openFile() },
+                        onOpenFolder: { store.openFolder() }
+                    )
+                } else {
+                    MarkdownPreview(text: store.text, documentURL: store.fileURL, onToggleTask: { line, checked in
+                        var lines = store.text.components(separatedBy: .newlines)
+                        guard line >= 0, line < lines.count else { return }
+                        let current = lines[line]
+                        if checked {
+                            lines[line] = current.replacingOccurrences(of: "- [ ]", with: "- [x]")
+                        } else {
+                            lines[line] = current.replacingOccurrences(of: "- [x]", with: "- [ ]")
+                        }
+                        store.textChanged(lines.joined(separator: "\n"))
+                    })
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+        }
+        .frame(minWidth: 600, minHeight: 400)
+        .overlay(alignment: .topTrailing) {
             Toolbar(
                 mode: $mode,
                 isSidebarVisible: $isSidebarVisible,
                 store: store
             )
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-
-            Divider()
-
-            HStack(spacing: 0) {
-                if store.folderURL != nil && isSidebarVisible {
-                    FolderSidebar(store: store)
-                        .frame(width: 230)
-                    Divider()
-                }
-
-                Group {
-                    if mode == .edit {
-                        HStack(spacing: 0) {
-                            Spacer()
-                            MarkdownEditor(text: textBinding)
-                                .frame(maxWidth: 800, maxHeight: .infinity)
-                            Spacer()
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color(NSColor.textBackgroundColor))
-                    } else if store.text.isEmpty {
-                        EmptyStateView(
-                            onOpenFile: { store.openFile() },
-                            onOpenFolder: { store.openFolder() }
-                        )
-                    } else {
-                        MarkdownPreview(text: store.text, documentURL: store.fileURL, onToggleTask: { line, checked in
-                            var lines = store.text.components(separatedBy: .newlines)
-                            guard line >= 0, line < lines.count else { return }
-                            let current = lines[line]
-                            if checked {
-                                lines[line] = current.replacingOccurrences(of: "- [ ]", with: "- [x]")
-                            } else {
-                                lines[line] = current.replacingOccurrences(of: "- [x]", with: "- [ ]")
-                            }
-                            store.textChanged(lines.joined(separator: "\n"))
-                        })
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }
-                }
-            }
-
-            Divider()
-
-            StatusBar(store: store)
+            .padding(.top, 10)
+            .padding(.trailing, 14)
         }
-        .frame(minWidth: 600, minHeight: 400)
+        .overlay(alignment: .bottomTrailing) {
+            StatusBar(store: store)
+                .padding(.bottom, 12)
+                .padding(.trailing, 14)
+        }
         .navigationTitle(store.fileURL?.lastPathComponent ?? "Untitled")
         .navigationSubtitle(store.folderURL?.lastPathComponent ?? "")
         .onChange(of: store.isDirty) { _, dirty in
