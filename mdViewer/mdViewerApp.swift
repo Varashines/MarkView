@@ -34,7 +34,7 @@ struct mdViewerApp: App {
                     )
                 }
         }
-        .windowToolbarStyle(.unified(showsTitle: true))
+        .windowToolbarStyle(.unified(showsTitle: false))
         .commands {
             CommandGroup(replacing: .newItem) { }
 

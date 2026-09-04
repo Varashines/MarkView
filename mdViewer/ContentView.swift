@@ -32,12 +32,19 @@ struct ContentView: View {
                     .padding(.trailing, 14)
             }
             .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    if store.folderURL != nil {
-                        Button(action: { withAnimation(.easeInOut(duration: 0.15)) { isSidebarVisible.toggle() } }) {
-                            Image(systemName: "sidebar.left")
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 6) {
+                        Text(store.fileURL?.lastPathComponent ?? "Untitled")
+                            .font(.headline)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        if let folderName = store.folderURL?.lastPathComponent {
+                            Text(folderName)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                         }
-                        .help("Toggle Sidebar (⌘\\)")
                     }
                 }
                 ToolbarItemGroup(placement: .primaryAction) {
@@ -80,7 +87,7 @@ struct ContentView: View {
     private var mainLayout: some View {
         HStack(spacing: 0) {
             if store.folderURL != nil && isSidebarVisible {
-                FolderSidebar(store: store)
+                FolderSidebar(store: store, isSidebarVisible: $isSidebarVisible)
                     .frame(width: 230)
                 Divider()
             }

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FolderSidebar: View {
     @ObservedObject var store: DocumentStore
+    @Binding var isSidebarVisible: Bool
     @State private var searchText = ""
     @State private var searchResults: [FolderSearch.Hit] = []
     @State private var isSearching = false
@@ -50,6 +51,11 @@ struct FolderSidebar: View {
             }
             .buttonStyle(.borderless)
             .help("Rescan folder")
+            Button(action: { withAnimation(.easeInOut(duration: 0.15)) { isSidebarVisible = false } }) {
+                Image(systemName: "sidebar.left")
+            }
+            .buttonStyle(.borderless)
+            .help("Hide Sidebar (⌘\\)")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
