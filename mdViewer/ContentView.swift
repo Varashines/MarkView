@@ -9,9 +9,16 @@ enum ViewMode {
 
 struct ContentView: View {
     @StateObject private var store = DocumentStore()
+    @Environment(\.colorScheme) private var colorScheme
     @State private var mode: ViewMode = .preview
     @State private var isSidebarVisible = false
     @State private var crossfade: Double = 0
+
+    private var contentBackgroundColor: Color {
+        colorScheme == .dark
+            ? Color(red: 13/255, green: 17/255, blue: 23/255)
+            : .white
+    }
 
     var body: some View {
         mainLayout
@@ -32,7 +39,11 @@ struct ContentView: View {
                 }
                 ToolbarItemGroup(placement: .primaryAction) {
                     Button(action: { toggleMode() }) {
-                        modeToggleLabel
+                        Label("Preview", systemImage: "eye")
+                            .font(.system(size: 13))
+                            .frame(width: 68)
+                            .contentShape(Rectangle())
+                            .foregroundStyle(mode == .preview ? Color.accentColor : Color.primary)
                     }
                     .help("Toggle Edit/Preview (⌘E)")
                 }
@@ -73,13 +84,6 @@ struct ContentView: View {
         }
     }
 
-    private var modeToggleLabel: some View {
-        Label(mode == .preview ? "Edit" : "Preview", systemImage: mode == .preview ? "pencil" : "eye")
-            .font(.system(size: 13))
-            .frame(width: 68)
-            .contentShape(Rectangle())
-    }
-
     @ViewBuilder
     private var modeContent: some View {
         Group {
@@ -96,7 +100,7 @@ struct ContentView: View {
         }
         .overlay {
             Rectangle()
-                .fill(Color(nsColor: .windowBackgroundColor))
+                .fill(contentBackgroundColor)
                 .opacity(crossfade)
                 .allowsHitTesting(false)
         }
@@ -110,7 +114,7 @@ struct ContentView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(NSColor.textBackgroundColor))
+        .background(contentBackgroundColor)
     }
 
     private var previewArea: some View {
