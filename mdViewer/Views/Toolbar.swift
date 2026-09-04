@@ -11,36 +11,37 @@ struct Toolbar: View {
             Button(action: { withAnimation(.easeInOut(duration: 0.15)) { mode = mode == .preview ? .edit : .preview } }) {
                 Label(mode == .preview ? "Edit" : "Preview", systemImage: mode == .preview ? "pencil" : "eye")
             }
-            .keyboardShortcut("e", modifiers: .command)
 
             if store.folderURL != nil {
                 Button(action: { withAnimation(.easeInOut(duration: 0.15)) { isSidebarVisible.toggle() } }) {
                     Label("Toggle Sidebar", systemImage: "sidebar.left")
                 }
-                .keyboardShortcut("\\", modifiers: .command)
             }
 
             Spacer()
-            
+
+            if !store.text.isEmpty {
+                Text(DocumentStats.summary(for: store.text))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .help("Word count and estimated reading time")
+            }
+
             Text(store.status)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-            
+
             Spacer()
-            
+
             Button("Open", action: { store.openFile() })
-                .keyboardShortcut("o", modifiers: .command)
 
             Button("Open Folder", action: { store.openFolder() })
-                .keyboardShortcut("o", modifiers: [.command, .shift])
-            
+
             Button("Save", action: { store.save() })
-                .keyboardShortcut("s", modifiers: .command)
                 .disabled(store.fileURL == nil && store.text.isEmpty)
-            
+
             Button("Export PDF", action: onExportPDF)
-                .keyboardShortcut("p", modifiers: [.command, .shift])
                 .disabled(store.text.isEmpty)
         }
     }

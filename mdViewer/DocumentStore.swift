@@ -2,6 +2,22 @@ import Foundation
 import AppKit
 import UniformTypeIdentifiers
 
+enum DocumentStats {
+    static func summary(for text: String) -> String {
+        let words = text.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
+        let minutes = Double(words) / 200.0
+        let reading: String
+        if words == 0 {
+            reading = "0 min"
+        } else if minutes < 1 {
+            reading = "<1 min"
+        } else {
+            reading = "\(Int(minutes.rounded())) min"
+        }
+        return "\(words) words · \(reading) read"
+    }
+}
+
 enum FolderScanner {
     struct Entry: Identifiable, Equatable {
         let url: URL

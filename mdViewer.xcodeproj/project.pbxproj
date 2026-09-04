@@ -22,6 +22,7 @@
 		A10000370000000000000037 /* github.min.css in Resources */ = {isa = PBXBuildFile; fileRef = A10000360000000000000036 /* github.min.css */; };
 		A10000390000000000000039 /* github-dark.min.css in Resources */ = {isa = PBXBuildFile; fileRef = A10000380000000000000038 /* github-dark.min.css */; };
 		A100003B000000000000003B /* FolderSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100003A000000000000003A /* FolderSidebar.swift */; };
+		A100003D000000000000003D /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100003C000000000000003C /* EmptyStateView.swift */; };
 		A10000210000000000000021 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000200000000000000020 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -42,6 +43,7 @@
 		A10000360000000000000036 /* github.min.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = github.min.css; sourceTree = "<group>"; };
 		A10000380000000000000038 /* github-dark.min.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = github-dark.min.css; sourceTree = "<group>"; };
 		A100003A000000000000003A /* FolderSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderSidebar.swift; sourceTree = "<group>"; };
+		A100003C000000000000003C /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
 		A100000A000000000000000B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A100000B000000000000000C /* mdViewer.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = mdViewer.entitlements; sourceTree = "<group>"; };
 		A10000200000000000000020 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -99,6 +101,7 @@
 				A10000070000000000000008 /* MarkdownPreview.swift */,
 				A10000080000000000000009 /* Toolbar.swift */,
 				A100003A000000000000003A /* FolderSidebar.swift */,
+				A100003C000000000000003C /* EmptyStateView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -199,6 +202,7 @@
 				A10000070000000000000007 /* MarkdownPreview.swift in Sources */,
 				A10000080000000000000008 /* Toolbar.swift in Sources */,
 				A100003B000000000000003B /* FolderSidebar.swift in Sources */,
+				A100003D000000000000003D /* EmptyStateView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
