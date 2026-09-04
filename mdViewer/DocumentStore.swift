@@ -31,6 +31,49 @@ enum DocumentStats {
     }
 }
 
+enum FolderSearch {
+    struct Hit: Identifiable, Equatable {
+        let url: URL
+        let line: Int
+        let snippet: String
+
+        var id: String { url.absoluteString + "#\(line)" }
+    }
+
+    static func search(
+        entries: [FolderScanner.Entry],
+        query: String,
+        maxHitsPerFile: Int = 3,
+        maxTotal: Int = 200
+    ) -> [Hit] {
+        let needle = query.lowercased()
+        guard !needle.isEmpty else { return [] }
+
+        var hits: [Hit] = []
+        for entry in entries {
+            guard hits.count < maxTotal else { break }
+            guard let data = try? Data(contentsOf: entry.url),
+                  data.count < 1_000_000,
+                  let content = String(data: data, encoding: .utf8) else {
+                continue
+            }
+            guard content.lowercased().contains(needle) else { continue }
+
+            let lines = content.components(separatedBy: .newlines)
+            var fileHits = 0
+            for (index, line) in lines.enumerated() where fileHits < maxHitsPerFile {
+                if line.lowercased().contains(needle) {
+                    let trimmed = line.trimmingCharacters(in: .whitespaces)
+                    let snippet = trimmed.count > 120 ? String(trimmed.prefix(120)) + "…" : trimmed
+                    hits.append(Hit(url: entry.url, line: index + 1, snippet: snippet))
+                    fileHits += 1
+                }
+            }
+        }
+        return hits
+    }
+}
+
 enum RecentItems {
     static let maxItems = 10
     static let filesKey = "recentFiles"

@@ -226,6 +226,12 @@ private struct AppCommandHandlers: ViewModifier {
                     store.openFolder(at: url)
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .openFileForEditURL)) { notification in
+                if let url = notification.object as? URL {
+                    store.openFile(at: url)
+                    withAnimation(.easeInOut(duration: 0.15)) { mode = .edit }
+                }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .openFileRequested)) { _ in
                 store.openFile()
             }
