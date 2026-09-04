@@ -56,18 +56,23 @@ struct MarkdownEditor: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         guard let textView = nsView.documentView as? NSTextView else { return }
+        var needsRefresh = false
         let font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         if textView.font != font {
             textView.font = font
-            (nsView.verticalRulerView as? LineNumberRulerView)?.invalidateLineCount()
-            nsView.verticalRulerView?.needsDisplay = true
-            textView.needsDisplay = true
+            needsRefresh = true
         }
         if textView.string != text {
             textView.string = text
+            needsRefresh = true
+        }
+        if needsRefresh {
             (nsView.verticalRulerView as? LineNumberRulerView)?.invalidateLineCount()
             nsView.verticalRulerView?.needsDisplay = true
             textView.needsDisplay = true
+            if let textStorage = textView.textStorage {
+                MarkdownHighlighter.apply(to: textStorage)
+            }
         }
     }
 
@@ -85,8 +90,10 @@ struct MarkdownEditor: NSViewRepresentable {
         }
 
         func textDidChange(_ notification: Notification) {
-            guard let textView = notification.object as? NSTextView else { return }
+            guard let textView = notification.object as? NSTextView,
+                  let textStorage = textView.textStorage else { return }
             parent.text = textView.string
+            MarkdownHighlighter.apply(to: textStorage)
             ruler?.invalidateLineCount()
             ruler?.needsDisplay = true
             textView.needsDisplay = true

@@ -24,6 +24,7 @@
 		A100003B000000000000003B /* FolderSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100003A000000000000003A /* FolderSidebar.swift */; };
 		A100003D000000000000003D /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100003C000000000000003C /* EmptyStateView.swift */; };
 		A100003F000000000000003F /* WindowChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100003E000000000000003E /* WindowChrome.swift */; };
+		A10000410000000000000041 /* MarkdownHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000400000000000000040 /* MarkdownHighlighter.swift */; };
 		A10000210000000000000021 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000200000000000000020 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -46,6 +47,7 @@
 		A100003A000000000000003A /* FolderSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderSidebar.swift; sourceTree = "<group>"; };
 		A100003C000000000000003C /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
 		A100003E000000000000003E /* WindowChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowChrome.swift; sourceTree = "<group>"; };
+		A10000400000000000000040 /* MarkdownHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownHighlighter.swift; sourceTree = "<group>"; };
 		A100000A000000000000000B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A100000B000000000000000C /* mdViewer.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = mdViewer.entitlements; sourceTree = "<group>"; };
 		A10000200000000000000020 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -79,6 +81,7 @@
 				A10000040000000000000005 /* MarkdownConverter.swift */,
 				A10000050000000000000006 /* PDFExporter.swift */,
 				A10000320000000000000032 /* DocumentResourceHandler.swift */,
+				A10000400000000000000040 /* MarkdownHighlighter.swift */,
 				A100003E000000000000003E /* WindowChrome.swift */,
 				A10000100000000000000011 /* Views */,
 				A10000110000000000000012 /* Resources */,
@@ -201,6 +204,7 @@
 				A10000040000000000000004 /* MarkdownConverter.swift in Sources */,
 				A10000050000000000000005 /* PDFExporter.swift in Sources */,
 				A10000330000000000000033 /* DocumentResourceHandler.swift in Sources */,
+				A10000410000000000000041 /* MarkdownHighlighter.swift in Sources */,
 				A100003F000000000000003F /* WindowChrome.swift in Sources */,
 				A10000060000000000000006 /* MarkdownEditor.swift in Sources */,
 				A10000070000000000000007 /* MarkdownPreview.swift in Sources */,
