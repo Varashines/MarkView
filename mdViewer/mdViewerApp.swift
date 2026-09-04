@@ -3,17 +3,8 @@ import SwiftUI
 @main
 struct mdViewerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @AppStorage("appearanceMode") private var appearanceMode = "system"
     @AppStorage(RecentItems.filesKey) private var recentFilesData: Data = Data()
     @AppStorage(RecentItems.foldersKey) private var recentFoldersData: Data = Data()
-
-    private var colorSchemeOverride: ColorScheme? {
-        switch appearanceMode {
-        case "light": return .light
-        case "dark": return .dark
-        default: return nil
-        }
-    }
 
     private var recentFiles: [URL] {
         (try? JSONDecoder().decode([URL].self, from: recentFilesData)) ?? []
@@ -26,7 +17,6 @@ struct mdViewerApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .preferredColorScheme(colorSchemeOverride)
                 .onOpenURL { url in
                     NotificationCenter.default.post(
                         name: .openFileURL,
@@ -95,37 +85,6 @@ struct mdViewerApp: App {
                     .keyboardShortcut("f")
             }
         }
-
-        Settings {
-            SettingsView()
-        }
-    }
-}
-
-struct SettingsView: View {
-    @AppStorage("appearanceMode") private var appearanceMode = "system"
-    @AppStorage("editorFontSize") private var editorFontSize = 13.0
-
-    var body: some View {
-        Form {
-            Picker("Appearance", selection: $appearanceMode) {
-                Text("System").tag("system")
-                Text("Light").tag("light")
-                Text("Dark").tag("dark")
-            }
-            .pickerStyle(.radioGroup)
-
-            HStack {
-                Text("Editor font size")
-                Slider(value: $editorFontSize, in: 10...22, step: 1)
-                    .labelsHidden()
-                Text("\(Int(editorFontSize)) pt")
-                    .monospacedDigit()
-                    .frame(width: 44)
-            }
-        }
-        .padding(20)
-        .frame(width: 340)
     }
 }
 

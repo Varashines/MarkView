@@ -11,7 +11,6 @@ struct ContentView: View {
     @StateObject private var store = DocumentStore()
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage("previewZoom") private var previewZoom = 1.0
-    @AppStorage("editorFontSize") private var editorFontSize = 13.0
     @State private var mode: ViewMode = .preview
     @State private var isSidebarVisible = false
     @State private var crossfade: Double = 0
@@ -32,6 +31,14 @@ struct ContentView: View {
                     .padding(.trailing, 14)
             }
             .toolbar {
+                ToolbarItem(placement: .navigation) {
+                    if store.folderURL != nil {
+                        Button(action: { withAnimation(.easeInOut(duration: 0.15)) { isSidebarVisible.toggle() } }) {
+                            Image(systemName: "sidebar.left")
+                        }
+                        .help("Toggle Sidebar (⌘\\)")
+                    }
+                }
                 ToolbarItem(placement: .principal) {
                     HStack(spacing: 6) {
                         Text(store.fileURL?.lastPathComponent ?? "Untitled")
@@ -120,7 +127,7 @@ struct ContentView: View {
     private var editorArea: some View {
         HStack(spacing: 0) {
             Spacer()
-            MarkdownEditor(text: textBinding, fontSize: editorFontSize)
+            MarkdownEditor(text: textBinding)
                 .frame(maxWidth: 800, maxHeight: .infinity)
             Spacer()
         }
