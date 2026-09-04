@@ -80,7 +80,7 @@ Nested lists are supported:
 Task nesting works too:
 
 - [x] Ship markdown viewer
-- [ ] Add syntax highlighting
+- [x] Add syntax highlighting
   - [x] Bundle highlight.js
   - [ ] Add editor highlighting
 
