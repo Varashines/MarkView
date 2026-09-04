@@ -41,8 +41,8 @@ struct ContentView: View {
                 ToolbarItemGroup(placement: .primaryAction) {
                     Button(action: { toggleMode() }) {
                         Label("Preview", systemImage: "eye")
-                            .font(.system(size: 13))
-                            .frame(width: 68)
+                            .font(.system(size: 12))
+                            .frame(width: 58)
                             .contentShape(Rectangle())
                             .foregroundStyle(mode == .preview ? Color.accentColor : Color.primary)
                     }
@@ -166,10 +166,10 @@ struct ContentView: View {
 
     private func toggleMode() {
         guard crossfade == 0 else { return }
-        withAnimation(.easeIn(duration: 0.08)) { crossfade = 1 }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+        withAnimation(.easeInOut(duration: 0.1)) { crossfade = 1 }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             mode = mode == .preview ? .edit : .preview
-            withAnimation(.easeOut(duration: 0.16)) { crossfade = 0 }
+            withAnimation(.easeInOut(duration: 0.18)) { crossfade = 0 }
         }
     }
 

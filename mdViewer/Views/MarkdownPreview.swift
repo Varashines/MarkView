@@ -16,6 +16,7 @@ struct MarkdownPreview: NSViewRepresentable {
         config.userContentController.add(context.coordinator, name: "contentDone")
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.isInspectable = false
+        webView.underPageBackgroundColor = .clear
         webView.navigationDelegate = context.coordinator
         context.coordinator.webView = webView
         context.coordinator.resourceHandler = resourceHandler
