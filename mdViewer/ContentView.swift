@@ -9,42 +9,52 @@ enum ViewMode {
 struct ContentView: View {
     @StateObject private var store = DocumentStore()
     @State private var mode: ViewMode = .preview
-    
+    @State private var isSidebarVisible = false
+
     var body: some View {
         VStack(spacing: 0) {
             Toolbar(
                 mode: $mode,
+                isSidebarVisible: $isSidebarVisible,
                 store: store,
                 onExportPDF: exportPDF
             )
             .padding(.horizontal)
             .padding(.vertical, 8)
-            
+
             Divider()
-            
-            Group {
-                if mode == .edit {
-                    HStack(spacing: 0) {
-                        Spacer()
-                        MarkdownEditor(text: textBinding)
-                            .frame(maxWidth: 800, maxHeight: .infinity)
-                        Spacer()
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(NSColor.textBackgroundColor))
-                } else {
-                    MarkdownPreview(text: store.text, documentURL: store.fileURL, onToggleTask: { line, checked in
-                        var lines = store.text.components(separatedBy: .newlines)
-                        guard line >= 0, line < lines.count else { return }
-                        let current = lines[line]
-                        if checked {
-                            lines[line] = current.replacingOccurrences(of: "- [ ]", with: "- [x]")
-                        } else {
-                            lines[line] = current.replacingOccurrences(of: "- [x]", with: "- [ ]")
+
+            HStack(spacing: 0) {
+                if store.folderURL != nil && isSidebarVisible {
+                    FolderSidebar(store: store)
+                        .frame(width: 230)
+                    Divider()
+                }
+
+                Group {
+                    if mode == .edit {
+                        HStack(spacing: 0) {
+                            Spacer()
+                            MarkdownEditor(text: textBinding)
+                                .frame(maxWidth: 800, maxHeight: .infinity)
+                            Spacer()
                         }
-                        store.textChanged(lines.joined(separator: "\n"))
-                    })
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color(NSColor.textBackgroundColor))
+                    } else {
+                        MarkdownPreview(text: store.text, documentURL: store.fileURL, onToggleTask: { line, checked in
+                            var lines = store.text.components(separatedBy: .newlines)
+                            guard line >= 0, line < lines.count else { return }
+                            let current = lines[line]
+                            if checked {
+                                lines[line] = current.replacingOccurrences(of: "- [ ]", with: "- [x]")
+                            } else {
+                                lines[line] = current.replacingOccurrences(of: "- [x]", with: "- [ ]")
+                            }
+                            store.textChanged(lines.joined(separator: "\n"))
+                        })
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
                 }
             }
         }
@@ -52,7 +62,19 @@ struct ContentView: View {
         .onAppear {
             store.onFileOpened = {}
             if let path = CommandLine.arguments.dropFirst().first {
-                store.openFile(at: URL(fileURLWithPath: path))
+                let url = URL(fileURLWithPath: path)
+                var isDirectory: ObjCBool = false
+                if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue {
+                    isSidebarVisible = true
+                    store.openFolder(at: url)
+                } else {
+                    store.openFile(at: url)
+                }
+            }
+        }
+        .onChange(of: store.folderURL) { _, newValue in
+            if newValue != nil {
+                isSidebarVisible = true
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .openFileURL)) { notification in
