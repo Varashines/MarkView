@@ -69,9 +69,11 @@ struct ContentView: View {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button(action: { withAnimation(.easeInOut(duration: 0.15)) { mode = mode == .preview ? .edit : .preview } }) {
                     Label(mode == .preview ? "Edit" : "Preview", systemImage: mode == .preview ? "pencil" : "eye")
-                        .font(.callout)
+                        .font(.system(size: 14, weight: .medium))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .contentShape(Rectangle())
                 }
-                .controlSize(.small)
                 .help("Toggle Edit/Preview (⌘E)")
             }
         }
