@@ -3,6 +3,16 @@ import SwiftUI
 @main
 struct mdViewerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @AppStorage(RecentItems.filesKey) private var recentFilesData: Data = Data()
+    @AppStorage(RecentItems.foldersKey) private var recentFoldersData: Data = Data()
+
+    private var recentFiles: [URL] {
+        (try? JSONDecoder().decode([URL].self, from: recentFilesData)) ?? []
+    }
+
+    private var recentFolders: [URL] {
+        (try? JSONDecoder().decode([URL].self, from: recentFoldersData)) ?? []
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -28,6 +38,32 @@ struct mdViewerApp: App {
                     .keyboardShortcut("s")
                 Button("Export as PDF…") { post(.exportPDFRequested) }
                     .keyboardShortcut("p", modifiers: [.command, .shift])
+                Divider()
+                Menu("Open Recent") {
+                    if recentFiles.isEmpty && recentFolders.isEmpty {
+                        Text("No Recent Items")
+                    } else {
+                        ForEach(recentFiles, id: \.self) { url in
+                            Button(url.lastPathComponent) {
+                                NotificationCenter.default.post(name: .openFileURL, object: url)
+                            }
+                            .help(url.deletingLastPathComponent().path)
+                        }
+                        if !recentFolders.isEmpty {
+                            Divider()
+                        }
+                        ForEach(recentFolders, id: \.self) { url in
+                            Button(url.lastPathComponent) {
+                                NotificationCenter.default.post(name: .openFolderURL, object: url)
+                            }
+                            .help(url.path)
+                        }
+                        Divider()
+                        Button("Clear Menu") {
+                            RecentItems.clear()
+                        }
+                    }
+                }
             }
 
             CommandGroup(after: .sidebar) {
@@ -62,6 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 extension Notification.Name {
     static let openFileURL = Notification.Name("openFileURL")
+    static let openFolderURL = Notification.Name("openFolderURL")
     static let openFileRequested = Notification.Name("openFileRequested")
     static let openFolderRequested = Notification.Name("openFolderRequested")
     static let saveRequested = Notification.Name("saveRequested")

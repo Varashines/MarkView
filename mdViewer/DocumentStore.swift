@@ -18,6 +18,65 @@ enum DocumentStats {
     }
 }
 
+enum RecentItems {
+    static let maxItems = 10
+    static let filesKey = "recentFiles"
+    static let foldersKey = "recentFolders"
+    static let lastFileKey = "lastOpenedFile"
+    static let lastFolderKey = "lastOpenedFolder"
+
+    static func addFile(_ url: URL, defaults: UserDefaults = .standard) {
+        add(url, key: filesKey, defaults: defaults)
+        defaults.set(url.standardizedFileURL.path, forKey: lastFileKey)
+    }
+
+    static func addFolder(_ url: URL, defaults: UserDefaults = .standard) {
+        add(url, key: foldersKey, defaults: defaults)
+        defaults.set(url.standardizedFileURL.path, forKey: lastFolderKey)
+    }
+
+    static func files(defaults: UserDefaults = .standard) -> [URL] {
+        read(filesKey, defaults)
+    }
+
+    static func folders(defaults: UserDefaults = .standard) -> [URL] {
+        read(foldersKey, defaults)
+    }
+
+    static func lastFile(defaults: UserDefaults = .standard) -> URL? {
+        defaults.string(forKey: lastFileKey).map { URL(fileURLWithPath: $0) }
+    }
+
+    static func lastFolder(defaults: UserDefaults = .standard) -> URL? {
+        defaults.string(forKey: lastFolderKey).map { URL(fileURLWithPath: $0) }
+    }
+
+    static func clear(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: filesKey)
+        defaults.removeObject(forKey: foldersKey)
+        defaults.removeObject(forKey: lastFileKey)
+        defaults.removeObject(forKey: lastFolderKey)
+    }
+
+    private static func add(_ url: URL, key: String, defaults: UserDefaults) {
+        var urls = read(key, defaults)
+        let standard = url.standardizedFileURL
+        urls.removeAll { $0.standardizedFileURL == standard }
+        urls.insert(standard, at: 0)
+        if urls.count > maxItems {
+            urls.removeLast(urls.count - maxItems)
+        }
+        if let data = try? JSONEncoder().encode(urls) {
+            defaults.set(data, forKey: key)
+        }
+    }
+
+    private static func read(_ key: String, _ defaults: UserDefaults) -> [URL] {
+        guard let data = defaults.data(forKey: key) else { return [] }
+        return (try? JSONDecoder().decode([URL].self, from: data)) ?? []
+    }
+}
+
 enum FolderScanner {
     struct Entry: Identifiable, Equatable {
         let url: URL
@@ -113,6 +172,7 @@ final class DocumentStore: ObservableObject {
     func openFolder(at url: URL) {
         folderURL = url
         status = "Folder open"
+        RecentItems.addFolder(url)
         rescanFolder()
     }
 
@@ -135,6 +195,7 @@ final class DocumentStore: ObservableObject {
             fileURL = url
             isDirty = false
             status = "Opened"
+            RecentItems.addFile(url)
             onFileOpened?()
         } catch {
             status = "Failed to open: \(error.localizedDescription)"
@@ -161,6 +222,7 @@ final class DocumentStore: ObservableObject {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         write(to: url)
         fileURL = url
+        RecentItems.addFile(url)
     }
     
     private func write(to url: URL) {

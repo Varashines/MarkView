@@ -67,14 +67,11 @@ struct ContentView: View {
                 }
             }
             ToolbarItemGroup(placement: .primaryAction) {
-                Picker("View Mode", selection: modeBinding) {
-                    Label("Edit", systemImage: "pencil").tag(ViewMode.edit)
-                    Label("Preview", systemImage: "eye").tag(ViewMode.preview)
+                Button(action: { withAnimation(.easeInOut(duration: 0.15)) { mode = mode == .preview ? .edit : .preview } }) {
+                    Label(mode == .preview ? "Edit" : "Preview", systemImage: mode == .preview ? "pencil" : "eye")
+                        .font(.callout)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
                 .controlSize(.small)
-                .frame(width: 150)
                 .help("Toggle Edit/Preview (⌘E)")
             }
         }
@@ -104,6 +101,8 @@ struct ContentView: View {
                 } else {
                     store.openFile(at: url)
                 }
+            } else {
+                restoreLastSession()
             }
         }
         .onChange(of: store.folderURL) { _, newValue in
@@ -119,11 +118,15 @@ struct ContentView: View {
         ))
     }
 
-    private var modeBinding: Binding<ViewMode> {
-        Binding(
-            get: { mode },
-            set: { newValue in withAnimation(.easeInOut(duration: 0.15)) { mode = newValue } }
-        )
+    private func restoreLastSession() {
+        if let folder = RecentItems.lastFolder(),
+           FileManager.default.fileExists(atPath: folder.path) {
+            store.openFolder(at: folder)
+        }
+        if let file = RecentItems.lastFile(),
+           FileManager.default.fileExists(atPath: file.path) {
+            store.openFile(at: file)
+        }
     }
 
     private var textBinding: Binding<String> {
@@ -155,6 +158,11 @@ private struct AppCommandHandlers: ViewModifier {
             .onReceive(NotificationCenter.default.publisher(for: .openFileURL)) { notification in
                 if let url = notification.object as? URL {
                     store.openFile(at: url)
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .openFolderURL)) { notification in
+                if let url = notification.object as? URL {
+                    store.openFolder(at: url)
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .openFileRequested)) { _ in
