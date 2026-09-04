@@ -106,7 +106,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 extension Notification.Name {
     static let openFileURL = Notification.Name("openFileURL")
     static let openFolderURL = Notification.Name("openFolderURL")
-    static let openFileForEditURL = Notification.Name("openFileForEditURL")
     static let openFileRequested = Notification.Name("openFileRequested")
     static let openFolderRequested = Notification.Name("openFolderRequested")
     static let saveRequested = Notification.Name("saveRequested")

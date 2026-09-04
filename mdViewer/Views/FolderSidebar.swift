@@ -2,7 +2,6 @@ import SwiftUI
 
 struct FolderSidebar: View {
     @ObservedObject var store: DocumentStore
-    @Binding var isSidebarVisible: Bool
     @State private var searchText = ""
     @State private var searchResults: [FolderSearch.Hit] = []
     @State private var isSearching = false
@@ -41,21 +40,11 @@ struct FolderSidebar: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer()
-            Button(action: createNewFile) {
-                Image(systemName: "plus")
-            }
-            .buttonStyle(.borderless)
-            .help("New Markdown file")
             Button(action: { store.rescanFolder() }) {
                 Image(systemName: "arrow.clockwise")
             }
             .buttonStyle(.borderless)
             .help("Rescan folder")
-            Button(action: { withAnimation(.easeInOut(duration: 0.15)) { isSidebarVisible = false } }) {
-                Image(systemName: "sidebar.left")
-            }
-            .buttonStyle(.borderless)
-            .help("Hide Sidebar (⌘\\)")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -187,24 +176,6 @@ struct FolderSidebar: View {
             }
         }
         .buttonStyle(.plain)
-    }
-
-    private func createNewFile() {
-        guard let folder = store.folderURL else { return }
-        var name = "Untitled.md"
-        var index = 2
-        while FileManager.default.fileExists(atPath: folder.appendingPathComponent(name).path) {
-            name = "Untitled \(index).md"
-            index += 1
-        }
-        let url = folder.appendingPathComponent(name)
-        do {
-            try "".write(to: url, atomically: true, encoding: .utf8)
-            store.rescanFolder()
-            NotificationCenter.default.post(name: .openFileForEditURL, object: url)
-        } catch {
-            store.status = "Create failed: \(error.localizedDescription)"
-        }
     }
 
     private func performRename() {

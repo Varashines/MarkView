@@ -101,7 +101,7 @@ struct ContentView: View {
     private var mainLayout: some View {
         HStack(spacing: 0) {
             if store.folderURL != nil && isSidebarVisible {
-                FolderSidebar(store: store, isSidebarVisible: $isSidebarVisible)
+                FolderSidebar(store: store)
                     .frame(width: 230)
                 Divider()
             }
@@ -245,12 +245,6 @@ private struct AppCommandHandlers: ViewModifier {
             .onReceive(NotificationCenter.default.publisher(for: .openFolderURL)) { notification in
                 if let url = notification.object as? URL {
                     store.openFolder(at: url)
-                }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .openFileForEditURL)) { notification in
-                if let url = notification.object as? URL {
-                    store.openFile(at: url)
-                    withAnimation(.easeInOut(duration: 0.15)) { mode = .edit }
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .openFileRequested)) { _ in
