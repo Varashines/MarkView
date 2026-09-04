@@ -53,6 +53,13 @@ struct ContentView: View {
                                 .truncationMode(.middle)
                         }
                     }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 4)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(Color.primary.opacity(0.08))
+                    )
                 }
                 ToolbarItemGroup(placement: .primaryAction) {
                     Button(action: { toggleMode() }) {
