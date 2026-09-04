@@ -108,6 +108,7 @@ final class LineNumberTextView: NSTextView {
 
     private func drawCurrentLineHighlight() {
         guard drawsBackground == false else { return }
+        guard window?.firstResponder as? NSTextView === self else { return }
         guard let layoutManager else { return }
         let length = (string as NSString).length
         guard length > 0 else { return }
