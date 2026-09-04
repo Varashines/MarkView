@@ -553,17 +553,34 @@ enum MarkdownConverter {
                 var code = pre.querySelector('code');
                 if (!code) return;
 
+                var language = pre.getAttribute('data-lang') || '';
+                function idleText() {
+                    return language ? language.toUpperCase() : 'Copy';
+                }
+
                 var button = document.createElement('button');
                 button.className = 'copy-code-button';
-                button.textContent = 'Copy';
+                button.textContent = idleText();
                 button.setAttribute('aria-label', 'Copy code');
+                if (language) { button.title = 'Copy ' + language + ' code'; }
+
                 button.addEventListener('click', function() {
                     var text = code.textContent || '';
                     if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.copyCode) {
                         window.webkit.messageHandlers.copyCode.postMessage(text);
                     }
                     button.textContent = 'Copied';
-                    setTimeout(function() { button.textContent = 'Copy'; }, 1500);
+                    setTimeout(function() {
+                        button.textContent = pre.matches(':hover') ? 'Copy' : idleText();
+                    }, 1500);
+                });
+
+                pre.addEventListener('mouseenter', function() {
+                    if (button.textContent !== 'Copied') { button.textContent = 'Copy'; }
+                });
+
+                pre.addEventListener('mouseleave', function() {
+                    if (button.textContent !== 'Copied') { button.textContent = idleText(); }
                 });
 
                 pre.style.position = 'relative';
