@@ -5,7 +5,8 @@ enum MarkdownConverter {
         let body = render(markdown)
         let css = Self.css()
         let hasMermaid = body.contains("<div class=\"mermaid\">")
-        let scripts = Self.scripts(hasMermaid: hasMermaid)
+        let hasCode = body.contains("<pre><code") || body.contains("<pre data-lang")
+        let scripts = Self.scripts(hasMermaid: hasMermaid, hasCode: hasCode)
         return """
         <!DOCTYPE html>
         <html>
@@ -33,10 +34,11 @@ enum MarkdownConverter {
             if rawLine.hasPrefix("```") {
                 if inCodeBlock {
                     let code = codeBuffer.dropFirst().joined(separator: "\n")
-                    if fenceLanguage(codeBuffer.first ?? "") == "mermaid" {
+                    let language = fenceLanguage(codeBuffer.first ?? "")
+                    if language == "mermaid" {
                         result.append("<div class=\"mermaid\">\(code)</div>")
                     } else {
-                        result.append("<pre><code>\(code)</code></pre>")
+                        result.append(codeBlockHTML(code: code, language: language))
                     }
                     codeBuffer = []
                     inCodeBlock = false
@@ -101,43 +103,10 @@ enum MarkdownConverter {
                 continue
             }
             
-            if line.range(of: "^[-*+]\\s+", options: .regularExpression) != nil {
-                var items: [String] = []
-                while i < lines.count {
-                    let lLine = lines[i].trimmingCharacters(in: .whitespaces)
-                    if lLine.range(of: "^[-*+]\\s+", options: .regularExpression) != nil,
-                       let suffixRange = lLine.range(of: "^[-*+]\\s+", options: .regularExpression) {
-                        let item = String(lLine[suffixRange.upperBound...])
-                        items.append("<li>\(renderListItem(item, lineIndex: i))</li>")
-                        i += 1
-                    } else if lLine.isEmpty {
-                        i += 1
-                        continue
-                    } else {
-                        break
-                    }
-                }
-                result.append("<ul>\(items.joined())</ul>")
-                continue
-            }
-            
-            if line.range(of: "^\\d+\\.\\s+", options: .regularExpression) != nil {
-                var items: [String] = []
-                while i < lines.count {
-                    let lLine = lines[i].trimmingCharacters(in: .whitespaces)
-                    if lLine.range(of: "^\\d+\\.\\s+", options: .regularExpression) != nil,
-                       let suffixRange = lLine.range(of: "^\\d+\\.\\s+", options: .regularExpression) {
-                        let item = String(lLine[suffixRange.upperBound...])
-                        items.append("<li>\(renderListItem(item, lineIndex: i))</li>")
-                        i += 1
-                    } else if lLine.isEmpty {
-                        i += 1
-                        continue
-                    } else {
-                        break
-                    }
-                }
-                result.append("<ol>\(items.joined())</ol>")
+            if itemInfo(for: rawLine) != nil {
+                let list = parseListBlock(lines: lines, startIndex: i, indent: indentWidth(of: rawLine))
+                result.append(list.html)
+                i = list.nextIndex
                 continue
             }
             
@@ -154,20 +123,121 @@ enum MarkdownConverter {
         
         if inCodeBlock {
             let code = codeBuffer.dropFirst().joined(separator: "\n")
-            if fenceLanguage(codeBuffer.first ?? "") == "mermaid" {
+            let language = fenceLanguage(codeBuffer.first ?? "")
+            if language == "mermaid" {
                 result.append("<div class=\"mermaid\">\(code)</div>")
             } else {
-                result.append("<pre><code>\(code)</code></pre>")
+                result.append(codeBlockHTML(code: code, language: language))
             }
         }
 
         return result.joined(separator: "\n")
     }
 
+    private static func codeBlockHTML(code: String, language: String) -> String {
+        guard !language.isEmpty else {
+            return "<pre><code>\(code)</code></pre>"
+        }
+        let escapedLanguage = escapeHtml(language)
+        return "<pre data-lang=\"\(escapedLanguage)\"><code class=\"language-\(escapedLanguage)\">\(code)</code></pre>"
+    }
+
     private static func fenceLanguage(_ openingFence: String) -> String {
         let info = String(openingFence.dropFirst(3)).trimmingCharacters(in: .whitespaces)
         let name = info.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true).first
         return name.map { $0.lowercased() } ?? ""
+    }
+
+    private struct ListItemInfo {
+        let indent: Int
+        let ordered: Bool
+        let content: String
+    }
+
+    private static let listItemRegex = try! NSRegularExpression(pattern: "^[ \\t]*([-*+]|\\d{1,9}[.)])[ \\t]+(.*)$")
+
+    private static func itemInfo(for rawLine: String) -> ListItemInfo? {
+        let range = NSRange(rawLine.startIndex..., in: rawLine)
+        guard let match = listItemRegex.firstMatch(in: rawLine, range: range),
+              match.range(at: 1).location != NSNotFound,
+              match.range(at: 2).location != NSNotFound,
+              let markerRange = Range(match.range(at: 1), in: rawLine),
+              let contentRange = Range(match.range(at: 2), in: rawLine) else {
+            return nil
+        }
+        let marker = String(rawLine[markerRange])
+        let ordered = marker.rangeOfCharacter(from: .decimalDigits) != nil
+        return ListItemInfo(
+            indent: indentWidth(of: rawLine),
+            ordered: ordered,
+            content: String(rawLine[contentRange])
+        )
+    }
+
+    private static func indentWidth(of line: String) -> Int {
+        var width = 0
+        for character in line {
+            if character == " " {
+                width += 1
+            } else if character == "\t" {
+                width += 4
+            } else {
+                break
+            }
+        }
+        return width
+    }
+
+    private static func parseListBlock(lines: [String], startIndex: Int, indent: Int) -> (html: String, nextIndex: Int) {
+        guard let first = itemInfo(for: lines[startIndex]) else {
+            return (html: "", nextIndex: startIndex)
+        }
+        let ordered = first.ordered
+        var itemContents: [String] = []
+        var i = startIndex
+
+        while i < lines.count {
+            let rawLine = lines[i]
+
+            if rawLine.trimmingCharacters(in: .whitespaces).isEmpty {
+                var j = i
+                while j < lines.count, lines[j].trimmingCharacters(in: .whitespaces).isEmpty {
+                    j += 1
+                }
+                if j < lines.count, let next = itemInfo(for: lines[j]), next.indent >= indent {
+                    i = j
+                    continue
+                }
+                break
+            }
+
+            guard let info = itemInfo(for: rawLine) else {
+                if let last = itemContents.indices.last, indentWidth(of: rawLine) > indent {
+                    itemContents[last] += " " + inlineRender(rawLine.trimmingCharacters(in: .whitespaces))
+                    i += 1
+                    continue
+                }
+                break
+            }
+
+            if info.indent < indent || (info.indent == indent && info.ordered != ordered) {
+                break
+            }
+
+            if info.indent > indent, !itemContents.isEmpty {
+                let nested = parseListBlock(lines: lines, startIndex: i, indent: info.indent)
+                itemContents[itemContents.count - 1] += nested.html
+                i = nested.nextIndex
+                continue
+            }
+
+            itemContents.append(renderListItem(info.content, lineIndex: i))
+            i += 1
+        }
+
+        let tag = ordered ? "ol" : "ul"
+        let html = "<\(tag)>" + itemContents.map { "<li>\($0)</li>" }.joined() + "</\(tag)>"
+        return (html: html, nextIndex: i > startIndex ? i : startIndex + 1)
     }
     
     private static func parseHeader(_ line: String) -> String? {
@@ -203,20 +273,92 @@ enum MarkdownConverter {
     
     private static func inlineRender(_ text: String) -> String {
         var result = escapeHtml(text)
-        
+
         result = result.replacingOccurrences(of: "`([^`]+)`", with: "<code>$1</code>", options: .regularExpression)
         result = result.replacingOccurrences(of: "\\*\\*([^*]+)\\*\\*", with: "<strong>$1</strong>", options: .regularExpression)
         result = result.replacingOccurrences(of: "__([^_]+)__", with: "<strong>$1</strong>", options: .regularExpression)
         result = result.replacingOccurrences(of: "\\*([^*]+)\\*", with: "<em>$1</em>", options: .regularExpression)
         result = result.replacingOccurrences(of: "_([^_]+)_", with: "<em>$1</em>", options: .regularExpression)
         result = result.replacingOccurrences(of: "~~([^~]+)~~", with: "<del>$1</del>", options: .regularExpression)
-        result = result.replacingOccurrences(of: "!\\[([^\\]]*)\\]\\(([^)]+)\\)", with: "<img src=\"$2\" alt=\"$1\">", options: .regularExpression)
+        result = renderImages(result)
         result = result.replacingOccurrences(of: "\\[([^\\]]+)\\]\\(([^)]+)\\)", with: "<a href=\"$2\">$1</a>", options: .regularExpression)
-        
+        result = autolink(result)
+
         if result.hasSuffix("  ") {
             result = String(result.dropLast(2)) + "<br>"
         }
-        
+
+        return result
+    }
+
+    private static func renderImages(_ text: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: "!\\[([^\\]]*)\\]\\(([^)]+)\\)") else {
+            return text
+        }
+        let ns = text as NSString
+        let fullRange = NSRange(location: 0, length: ns.length)
+        var result = ""
+        var cursor = 0
+
+        regex.enumerateMatches(in: text, range: fullRange) { match, _, _ in
+            guard let match, match.range.location >= cursor else { return }
+            if match.range.location > cursor {
+                result += ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
+            }
+            let alt = ns.substring(with: match.range(at: 1))
+            let source = resolveImageSource(ns.substring(with: match.range(at: 2)))
+            result += "<img src=\"\(source)\" alt=\"\(alt)\">"
+            cursor = match.range.location + match.range.length
+        }
+
+        if cursor < ns.length {
+            result += ns.substring(from: cursor)
+        }
+        return result
+    }
+
+    private static func resolveImageSource(_ source: String) -> String {
+        let trimmed = source.trimmingCharacters(in: .whitespaces)
+        let lower = trimmed.lowercased()
+        if lower.hasPrefix("http://") || lower.hasPrefix("https://") || lower.hasPrefix("data:") || lower.hasPrefix("mdresource://") {
+            return trimmed
+        }
+        let relative = trimmed.hasPrefix("/") ? String(trimmed.dropFirst()) : trimmed
+        let encoded = relative.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? relative
+        return "mdresource:///\(encoded)"
+    }
+
+    private static func autolink(_ text: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: "(?<!href=\")(?<!src=\")(?<!>)https?://[^\\s<]+") else {
+            return text
+        }
+        let ns = text as NSString
+        let fullRange = NSRange(location: 0, length: ns.length)
+        var result = ""
+        var cursor = 0
+
+        regex.enumerateMatches(in: text, range: fullRange) { match, _, _ in
+            guard let match, match.range.location >= cursor else { return }
+            if match.range.location > cursor {
+                result += ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
+            }
+            var url = ns.substring(with: match.range)
+            while let last = url.last, ".,;:!?".contains(last) {
+                url.removeLast()
+            }
+            while url.hasSuffix(")") {
+                let opens = url.filter { $0 == "(" }.count
+                let closes = url.filter { $0 == ")" }.count
+                guard opens < closes else { break }
+                url.removeLast()
+            }
+            result += "<a href=\"\(url)\">\(url)</a>"
+            cursor = match.range.location + url.utf16.count
+        }
+
+        if cursor < ns.length {
+            result += ns.substring(from: cursor)
+        }
         return result
     }
     
@@ -308,6 +450,8 @@ enum MarkdownConverter {
         text.replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&#39;")
     }
     
     private static func css() -> String {
@@ -315,19 +459,59 @@ enum MarkdownConverter {
               let css = try? String(contentsOf: url, encoding: .utf8) else {
             return ""
         }
+        return highlightCss() + css
+    }
+
+    private static func highlightCss() -> String {
+        guard let lightURL = Bundle.main.url(forResource: "github.min", withExtension: "css"),
+              let light = try? String(contentsOf: lightURL, encoding: .utf8) else {
+            return ""
+        }
+        var css = light
+        if let darkURL = Bundle.main.url(forResource: "github-dark.min", withExtension: "css"),
+           let dark = try? String(contentsOf: darkURL, encoding: .utf8) {
+            css += "@media (prefers-color-scheme: dark){\(dark)}"
+        }
         return css
     }
-    
-    private static func scripts(hasMermaid: Bool) -> String {
+
+    private static func scripts(hasMermaid: Bool, hasCode: Bool) -> String {
         var scripts = "<script>\(script())</script>"
-        guard hasMermaid else { return scripts }
-        if let library = mermaidLibrary() {
+        if hasCode, let library = highlightLibrary() {
             scripts += "<script>\(library)</script>"
-            scripts += "<script>\(mermaidInitScript())</script>"
-        } else {
-            scripts += "<script>window.__mermaidDone = true;</script>"
+            scripts += "<script>\(highlightInitScript())</script>"
+        }
+        if hasMermaid {
+            if let library = mermaidLibrary() {
+                scripts += "<script>\(library)</script>"
+                scripts += "<script>\(mermaidInitScript())</script>"
+            } else {
+                scripts += "<script>window.__contentDone = true;</script>"
+            }
         }
         return scripts
+    }
+
+    private static func highlightLibrary() -> String? {
+        guard let url = Bundle.main.url(forResource: "highlight.min", withExtension: "js"),
+              let js = try? String(contentsOf: url, encoding: .utf8) else {
+            return nil
+        }
+        return js
+    }
+
+    private static func highlightInitScript() -> String {
+        """
+        (function() {
+            var blocks = document.querySelectorAll('pre code');
+            if (!blocks.length || !window.hljs) { return; }
+            blocks.forEach(function(el) {
+                if (el.getAttribute('data-highlighted')) { return; }
+                try { hljs.highlightElement(el); } catch (e) {}
+            });
+            window.__contentDone = true;
+        })();
+        """
     }
 
     private static func mermaidLibrary() -> String? {
@@ -340,13 +524,13 @@ enum MarkdownConverter {
 
     private static func mermaidInitScript() -> String {
         """
-        window.__mermaidDone = false;
+        window.__contentDone = false;
         (function() {
             var blocks = document.querySelectorAll('div.mermaid');
             var complete = function() {
-                window.__mermaidDone = true;
-                if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.mermaidDone) {
-                    window.webkit.messageHandlers.mermaidDone.postMessage('');
+                window.__contentDone = true;
+                if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.contentDone) {
+                    window.webkit.messageHandlers.contentDone.postMessage('');
                 }
             };
             if (!window.mermaid || !blocks.length) { complete(); return; }
@@ -363,29 +547,47 @@ enum MarkdownConverter {
 
     private static func script() -> String {
         """
+        window.__contentDone = false;
         document.addEventListener('DOMContentLoaded', function() {
             document.querySelectorAll('pre').forEach(function(pre) {
                 var code = pre.querySelector('code');
                 if (!code) return;
-                
+
+                var language = pre.getAttribute('data-lang') || '';
+                function idleText() {
+                    return language ? language.toUpperCase() : 'Copy';
+                }
+
                 var button = document.createElement('button');
                 button.className = 'copy-code-button';
-                button.textContent = 'Copy';
+                button.textContent = idleText();
                 button.setAttribute('aria-label', 'Copy code');
+                if (language) { button.title = 'Copy ' + language + ' code'; }
+
                 button.addEventListener('click', function() {
                     var text = code.textContent || '';
                     if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.copyCode) {
                         window.webkit.messageHandlers.copyCode.postMessage(text);
                     }
                     button.textContent = 'Copied';
-                    setTimeout(function() { button.textContent = 'Copy'; }, 1500);
+                    setTimeout(function() {
+                        button.textContent = pre.matches(':hover') ? 'Copy' : idleText();
+                    }, 1500);
                 });
-                
+
+                pre.addEventListener('mouseenter', function() {
+                    if (button.textContent !== 'Copied') { button.textContent = 'Copy'; }
+                });
+
+                pre.addEventListener('mouseleave', function() {
+                    if (button.textContent !== 'Copied') { button.textContent = idleText(); }
+                });
+
                 pre.style.position = 'relative';
                 pre.appendChild(button);
             });
         });
-        
+
         document.addEventListener('change', function(e) {
             if (e.target && e.target.type === 'checkbox' && e.target.hasAttribute('data-line')) {
                 var lineIndex = parseInt(e.target.getAttribute('data-line'));
@@ -395,6 +597,8 @@ enum MarkdownConverter {
                 }
             }
         });
+
+        window.__contentDone = true;
         """
     }
 }

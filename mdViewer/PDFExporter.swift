@@ -5,25 +5,32 @@ import WebKit
 final class PDFExporter: NSObject {
     private let html: String
     private let window: NSWindow?
+    private let resourceBase: URL?
     private var webView: WKWebView?
+    private var resourceHandler: DocumentResourceHandler?
     private static var activeExporter: PDFExporter?
 
-    private init(html: String, window: NSWindow?) {
+    private init(html: String, window: NSWindow?, resourceBase: URL?) {
         self.html = html
         self.window = window
+        self.resourceBase = resourceBase
         super.init()
     }
 
-    static func export(from html: String, window: NSWindow?) {
-        let exporter = PDFExporter(html: html, window: window)
+    static func export(from html: String, window: NSWindow?, resourceBase: URL?) {
+        let exporter = PDFExporter(html: html, window: window, resourceBase: resourceBase)
         activeExporter = exporter
         exporter.start()
     }
 
     private func start() {
         let config = WKWebViewConfiguration()
+        let handler = DocumentResourceHandler()
+        handler.baseURL = resourceBase
+        config.setURLSchemeHandler(handler, forURLScheme: DocumentResourceHandler.scheme)
         let webView = WKWebView(frame: .zero, configuration: config)
         self.webView = webView
+        self.resourceHandler = handler
         webView.navigationDelegate = self
         webView.loadHTMLString(html, baseURL: nil)
     }
@@ -40,7 +47,7 @@ extension PDFExporter: WKNavigationDelegate {
     }
 
     private func waitForContent(_ webView: WKWebView, attempts: Int) {
-        webView.evaluateJavaScript("window.__mermaidDone === true") { [weak self] result, _ in
+        webView.evaluateJavaScript("window.__contentDone === true") { [weak self] result, _ in
             if (result as? Bool) == true {
                 self?.printWebView(webView)
             } else if attempts < 150 {
