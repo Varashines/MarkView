@@ -5,6 +5,7 @@ import AppKit
 struct MarkdownPreview: NSViewRepresentable {
     let text: String
     var documentURL: URL?
+    var zoom: Double = 1.0
     var onToggleTask: ((Int, Bool) -> Void)?
 
     func makeNSView(context: Context) -> WKWebView {
@@ -16,6 +17,7 @@ struct MarkdownPreview: NSViewRepresentable {
         config.userContentController.add(context.coordinator, name: "contentDone")
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.isInspectable = false
+        webView.underPageBackgroundColor = .clear
         webView.navigationDelegate = context.coordinator
         context.coordinator.webView = webView
         context.coordinator.resourceHandler = resourceHandler
@@ -24,6 +26,9 @@ struct MarkdownPreview: NSViewRepresentable {
 
     func updateNSView(_ nsView: WKWebView, context: Context) {
         context.coordinator.resourceHandler?.baseURL = documentURL?.deletingLastPathComponent()
+        if nsView.pageZoom != zoom {
+            nsView.pageZoom = zoom
+        }
         guard context.coordinator.lastMarkdownText != text else { return }
         if context.coordinator.skipNextLoad {
             context.coordinator.skipNextLoad = false
@@ -89,6 +94,43 @@ struct MarkdownPreview: NSViewRepresentable {
             guard y > 0 else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                 webView.evaluateJavaScript("window.scrollTo(0, \(y))")
+            }
+        }
+
+        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            guard navigationAction.navigationType == .linkActivated,
+                  let url = navigationAction.request.url else {
+                decisionHandler(.allow)
+                return
+            }
+
+            let scheme = url.scheme?.lowercased()
+
+            if url.fragment != nil, url.host == nil, scheme == nil || scheme == "about" {
+                decisionHandler(.allow)
+                return
+            }
+
+            switch scheme {
+            case "http", "https", "mailto":
+                NSWorkspace.shared.open(url)
+                decisionHandler(.cancel)
+            case nil:
+                openRelativeLink(url)
+                decisionHandler(.cancel)
+            default:
+                decisionHandler(.cancel)
+            }
+        }
+
+        private func openRelativeLink(_ url: URL) {
+            guard let base = resourceHandler?.baseURL else { return }
+            let target = base.appendingPathComponent(url.path).standardizedFileURL
+            let ext = target.pathExtension.lowercased()
+            if ["md", "markdown", "txt"].contains(ext) {
+                NotificationCenter.default.post(name: .openFileURL, object: target)
+            } else {
+                NSWorkspace.shared.open(target)
             }
         }
     }

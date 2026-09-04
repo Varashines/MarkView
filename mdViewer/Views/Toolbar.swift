@@ -1,47 +1,44 @@
 import SwiftUI
 
-struct Toolbar: View {
-    @Binding var mode: ViewMode
-    @Binding var isSidebarVisible: Bool
+struct StatusBar: View {
     @ObservedObject var store: DocumentStore
-    var onExportPDF: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            Button(action: { withAnimation(.easeInOut(duration: 0.15)) { mode = mode == .preview ? .edit : .preview } }) {
-                Label(mode == .preview ? "Edit" : "Preview", systemImage: mode == .preview ? "pencil" : "eye")
+        HStack(spacing: 6) {
+            if let folderName = store.folderURL?.lastPathComponent {
+                Image(systemName: "folder")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text(folderName)
+                    .font(.caption)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text("·")
+                    .foregroundStyle(.tertiary)
             }
-            .keyboardShortcut("e", modifiers: .command)
 
-            if store.folderURL != nil {
-                Button(action: { withAnimation(.easeInOut(duration: 0.15)) { isSidebarVisible.toggle() } }) {
-                    Label("Toggle Sidebar", systemImage: "sidebar.left")
-                }
-                .keyboardShortcut("\\", modifiers: .command)
+            if !store.text.isEmpty {
+                Text(DocumentStats.summary(for: store.text))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("·")
+                    .foregroundStyle(.tertiary)
             }
 
-            Spacer()
-            
             Text(store.status)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-            
-            Spacer()
-            
-            Button("Open", action: { store.openFile() })
-                .keyboardShortcut("o", modifiers: .command)
-
-            Button("Open Folder", action: { store.openFolder() })
-                .keyboardShortcut("o", modifiers: [.command, .shift])
-            
-            Button("Save", action: { store.save() })
-                .keyboardShortcut("s", modifiers: .command)
-                .disabled(store.fileURL == nil && store.text.isEmpty)
-            
-            Button("Export PDF", action: onExportPDF)
-                .keyboardShortcut("p", modifiers: [.command, .shift])
-                .disabled(store.text.isEmpty)
+                .truncationMode(.middle)
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(
+            Capsule()
+                .strokeBorder(Color.primary.opacity(0.08))
+        )
+        .shadow(color: .black.opacity(0.1), radius: 6, y: 2)
+        .frame(maxWidth: 460)
     }
 }

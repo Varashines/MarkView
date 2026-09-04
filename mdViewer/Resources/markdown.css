@@ -54,27 +54,36 @@ code {
 }
 
 pre {
+    position: relative;
     background-color: #f6f8fa;
-    border-radius: 6px;
+    border-radius: 10px;
+    border: 1px solid rgba(9, 30, 66, 0.08);
+    box-shadow: 0 1px 3px rgba(9, 30, 66, 0.06);
     padding: 16px;
     overflow: auto;
     margin-bottom: 16px;
+    font-size: 14px;
+    line-height: 1.55;
 }
 
-pre code {
-    background-color: transparent;
-    padding: 0;
-}
-
+pre code,
 pre code.hljs {
     background-color: transparent;
-    padding: 0;
     color: inherit;
     font-size: inherit;
+    padding: 0;
 }
 
 @media (prefers-color-scheme: dark) {
-    pre { background-color: #161b22; }
+    pre {
+        background-color: #161b22;
+        border-color: rgba(240, 246, 252, 0.1);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    }
+}
+
+@media print {
+    pre { box-shadow: none; }
 }
 
 pre {
@@ -166,15 +175,10 @@ input[type="checkbox"] {
     letter-spacing: 0.03em;
     color: #57606a;
     background-color: rgba(175, 184, 193, 0.25);
-    border: 1px solid rgba(0, 0, 0, 0.12);
+    border: 1px solid rgba(9, 30, 66, 0.1);
     border-radius: 6px;
     cursor: pointer;
-    opacity: 0.85;
-    transition: opacity 0.2s ease, background-color 0.2s ease, color 0.2s ease;
-}
-
-pre:hover .copy-code-button {
-    opacity: 1;
+    transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .copy-code-button:hover {
@@ -182,14 +186,23 @@ pre:hover .copy-code-button {
     background-color: rgba(175, 184, 193, 0.45);
 }
 
+.copy-code-button.copied {
+    color: #1a7f37;
+    background-color: rgba(63, 185, 80, 0.15);
+}
+
 @media (prefers-color-scheme: dark) {
     .copy-code-button {
         color: #8b949e;
         background-color: rgba(110, 118, 129, 0.35);
-        border-color: rgba(255, 255, 255, 0.12);
+        border-color: rgba(240, 246, 252, 0.12);
     }
     .copy-code-button:hover {
         color: #c9d1d9;
         background-color: rgba(110, 118, 129, 0.55);
+    }
+    .copy-code-button.copied {
+        color: #3fb950;
+        background-color: rgba(63, 185, 80, 0.2);
     }
 }

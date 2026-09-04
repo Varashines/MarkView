@@ -570,7 +570,9 @@ enum MarkdownConverter {
                         window.webkit.messageHandlers.copyCode.postMessage(text);
                     }
                     button.textContent = 'Copied';
+                    button.classList.add('copied');
                     setTimeout(function() {
+                        button.classList.remove('copied');
                         button.textContent = pre.matches(':hover') ? 'Copy' : idleText();
                     }, 1500);
                 });
@@ -583,7 +585,6 @@ enum MarkdownConverter {
                     if (button.textContent !== 'Copied') { button.textContent = idleText(); }
                 });
 
-                pre.style.position = 'relative';
                 pre.appendChild(button);
             });
         });
