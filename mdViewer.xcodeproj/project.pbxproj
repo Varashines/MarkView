@@ -16,6 +16,7 @@
 		A10000070000000000000007 /* MarkdownPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000070000000000000008 /* MarkdownPreview.swift */; };
 		A10000080000000000000008 /* Toolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000080000000000000009 /* Toolbar.swift */; };
 		A10000090000000000000009 /* markdown.css in Resources */ = {isa = PBXBuildFile; fileRef = A1000009000000000000000A /* markdown.css */; };
+		A10000310000000000000031 /* mermaid.min.js in Resources */ = {isa = PBXBuildFile; fileRef = A10000300000000000000030 /* mermaid.min.js */; };
 		A10000210000000000000021 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000200000000000000020 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -30,6 +31,7 @@
 		A10000070000000000000008 /* MarkdownPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownPreview.swift; sourceTree = "<group>"; };
 		A10000080000000000000009 /* Toolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Toolbar.swift; sourceTree = "<group>"; };
 		A1000009000000000000000A /* markdown.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = markdown.css; sourceTree = "<group>"; };
+		A10000300000000000000030 /* mermaid.min.js */ = {isa = PBXFileReference; lastKnownFileType = text.javascript; path = mermaid.min.js; sourceTree = "<group>"; };
 		A100000A000000000000000B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A100000B000000000000000C /* mdViewer.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = mdViewer.entitlements; sourceTree = "<group>"; };
 		A10000200000000000000020 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -93,6 +95,7 @@
 			isa = PBXGroup;
 			children = (
 				A1000009000000000000000A /* markdown.css */,
+				A10000300000000000000030 /* mermaid.min.js */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -157,6 +160,7 @@
 			files = (
 				A10000090000000000000009 /* markdown.css in Resources */,
 				A10000210000000000000021 /* Assets.xcassets in Resources */,
+				A10000310000000000000031 /* mermaid.min.js in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

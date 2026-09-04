@@ -36,6 +36,24 @@ final class PDFExporter: NSObject {
 
 extension PDFExporter: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        waitForContent(webView, attempts: 0)
+    }
+
+    private func waitForContent(_ webView: WKWebView, attempts: Int) {
+        webView.evaluateJavaScript("window.__mermaidDone === true") { [weak self] result, _ in
+            if (result as? Bool) == true {
+                self?.printWebView(webView)
+            } else if attempts < 150 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self?.waitForContent(webView, attempts: attempts + 1)
+                }
+            } else {
+                self?.printWebView(webView)
+            }
+        }
+    }
+
+    private func printWebView(_ webView: WKWebView) {
         defer { finish() }
 
         let printInfo = NSPrintInfo.shared

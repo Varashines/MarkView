@@ -13,6 +13,7 @@ Setext Header 2
 - Open existing `.md` files
 - Edit with a monospace source editor
 - Preview with a WebKit renderer
+- Render Mermaid diagrams
 - Autosave after 1 second of inactivity
 - Export the rendered preview to PDF
 - ~~Scratch that~~
@@ -35,6 +36,29 @@ struct ContentView: View {
         Text("Hello, Markdown!")
     }
 }
+```
+
+## Mermaid Diagrams
+
+Fenced code blocks tagged `mermaid` are rendered as diagrams.
+
+```mermaid
+flowchart TD
+    A[Open .md file] --> B{Mode?}
+    B -->|Edit| C[Monospace editor]
+    B -->|Preview| D[WebKit renderer]
+    C --> D
+    D --> E[Export PDF]
+```
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant A as App
+    participant W as WebKit
+    U->>A: Open markdown file
+    A->>W: Render HTML
+    W-->>U: Show preview
 ```
 
 > This is a blockquote with a **bold** statement.

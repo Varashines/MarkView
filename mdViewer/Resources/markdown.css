@@ -103,6 +103,18 @@ hr {
 
 img { max-width: 100%; box-sizing: border-box; }
 
+.mermaid {
+    display: flex;
+    justify-content: center;
+    margin: 0 0 16px;
+    overflow-x: auto;
+}
+
+.mermaid svg {
+    max-width: 100%;
+    height: auto;
+}
+
 table {
     border-collapse: collapse;
     width: 100%;
