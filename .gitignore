@@ -1,0 +1,33 @@
+.DS_Store
+
+## Xcode build artifacts
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+## Swift Package Manager
+.build/
+Packages/
+Package.pins
+Package.resolved
+
+## CocoaPods
+Pods/
+
+## Carthage
+Carthage/Build/
+
+## Accio dependency management
+Dependencies/
+.accio/
+
+## Playgrounds
+timeline.xctimeline
+playground.xcworkspace
