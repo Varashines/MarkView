@@ -92,11 +92,11 @@ extension PDFExporter: WKNavigationDelegate {
     private func printContinuous(_ webView: WKWebView, cssHeight: Double) {
         defer { finish() }
 
-        // 860 CSS px wide layout at 96dpi → 645pt; 1px = 0.75pt with zero scaling.
-        // A small height cushion absorbs rounding so the tail never spills onto a
-        // second sliver page.
-        let paperWidth: CGFloat = 645
-        let paperHeight = cssHeight * 0.75 + 12
+        // WebKit print layout is 1 CSS px = 1 pt, so an 860pt paper width reproduces
+        // the screen layout at the 860px content width exactly. The .fit pagination
+        // mode guarantees a single page even if the mapping assumption is off.
+        let paperWidth: CGFloat = 860
+        let paperHeight = cssHeight + 16
         let maxHeight: CGFloat = 14_390
 
         let printInfo = NSPrintInfo.shared.copy() as? NSPrintInfo ?? NSPrintInfo.shared
