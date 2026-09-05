@@ -86,6 +86,16 @@ Task nesting works too:
 
 Bare URLs autolink: https://swift.org and https://github.com.
 
+## Math
+
+Inline LaTeX like $\rightarrow$ and $E = mc^2$ renders with KaTeX.
+
+Block math:
+
+$$\sum_{i=1}^{n} x_i = \frac{n(n+1)}{2}$$
+
+Escaped dollars stay literal: \$5 and \$10.
+
 > This is a blockquote with a **bold** statement.
 
 ---

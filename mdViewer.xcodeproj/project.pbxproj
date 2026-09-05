@@ -25,6 +25,9 @@
 		A100003D000000000000003D /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100003C000000000000003C /* EmptyStateView.swift */; };
 		A100003F000000000000003F /* WindowChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100003E000000000000003E /* WindowChrome.swift */; };
 		A10000410000000000000041 /* MarkdownHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000400000000000000040 /* MarkdownHighlighter.swift */; };
+		A10000430000000000000043 /* katex.min.js in Resources */ = {isa = PBXBuildFile; fileRef = A10000420000000000000042 /* katex.min.js */; };
+		A10000450000000000000045 /* katex.min.css in Resources */ = {isa = PBXBuildFile; fileRef = A10000440000000000000044 /* katex.min.css */; };
+		A10000470000000000000047 /* fonts in Resources */ = {isa = PBXBuildFile; fileRef = A10000460000000000000046 /* fonts */; };
 		A10000210000000000000021 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000200000000000000020 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -48,6 +51,9 @@
 		A100003C000000000000003C /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
 		A100003E000000000000003E /* WindowChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowChrome.swift; sourceTree = "<group>"; };
 		A10000400000000000000040 /* MarkdownHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownHighlighter.swift; sourceTree = "<group>"; };
+		A10000420000000000000042 /* katex.min.js */ = {isa = PBXFileReference; lastKnownFileType = text.javascript; path = katex.min.js; sourceTree = "<group>"; };
+		A10000440000000000000044 /* katex.min.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = katex.min.css; sourceTree = "<group>"; };
+		A10000460000000000000046 /* fonts */ = {isa = PBXFileReference; lastKnownFileType = folder; path = fonts; sourceTree = "<group>"; };
 		A100000A000000000000000B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A100000B000000000000000C /* mdViewer.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = mdViewer.entitlements; sourceTree = "<group>"; };
 		A10000200000000000000020 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -120,6 +126,9 @@
 				A10000340000000000000034 /* highlight.min.js */,
 				A10000360000000000000036 /* github.min.css */,
 				A10000380000000000000038 /* github-dark.min.css */,
+				A10000420000000000000042 /* katex.min.js */,
+				A10000440000000000000044 /* katex.min.css */,
+				A10000460000000000000046 /* fonts */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -188,6 +197,9 @@
 				A10000350000000000000035 /* highlight.min.js in Resources */,
 				A10000370000000000000037 /* github.min.css in Resources */,
 				A10000390000000000000039 /* github-dark.min.css in Resources */,
+				A10000430000000000000043 /* katex.min.js in Resources */,
+				A10000450000000000000045 /* katex.min.css in Resources */,
+				A10000470000000000000047 /* fonts in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

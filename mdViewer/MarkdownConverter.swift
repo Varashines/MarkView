@@ -6,14 +6,16 @@ enum MarkdownConverter {
         let css = Self.css()
         let hasMermaid = body.contains("<div class=\"mermaid\">")
         let hasCode = body.contains("<pre><code") || body.contains("<pre data-lang")
-        let scripts = Self.scripts(hasMermaid: hasMermaid, hasCode: hasCode)
+        let hasMath = body.contains("<span class=\"math-inline\">") || body.contains("<div class=\"math-block\">")
+        let scripts = Self.scripts(hasMermaid: hasMermaid, hasCode: hasCode, hasMath: hasMath)
+        let styleContent = hasMath ? css + katexCss() : css
         return """
         <!DOCTYPE html>
         <html>
         <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>\(css)</style>
+        <style>\(styleContent)</style>
         </head>
         <body>\(body)</body>
         \(scripts)
@@ -66,6 +68,13 @@ enum MarkdownConverter {
             
             if line == "---" || line == "***" || line == "___" {
                 result.append("<hr>")
+                i += 1
+                continue
+            }
+
+            if line.hasPrefix("$$"), line.hasSuffix("$$"), line.count > 4 {
+                let latex = String(line.dropFirst(2).dropLast(2))
+                result.append("<div class=\"math-block\">\(escapeHtml(latex))</div>")
                 i += 1
                 continue
             }
@@ -273,6 +282,10 @@ enum MarkdownConverter {
     
     private static func inlineRender(_ text: String) -> String {
         var result = escapeHtml(text)
+        result = result.replacingOccurrences(of: "\\$", with: "&dollar;")
+
+        let (withoutMath, mathSpans) = extractInlineMath(result)
+        result = withoutMath
 
         result = result.replacingOccurrences(of: "`([^`]+)`", with: "<code>$1</code>", options: .regularExpression)
         result = result.replacingOccurrences(of: "\\*\\*([^*]+)\\*\\*", with: "<strong>$1</strong>", options: .regularExpression)
@@ -284,11 +297,44 @@ enum MarkdownConverter {
         result = result.replacingOccurrences(of: "\\[([^\\]]+)\\]\\(([^)]+)\\)", with: "<a href=\"$2\">$1</a>", options: .regularExpression)
         result = autolink(result)
 
+        for (index, span) in mathSpans.enumerated() {
+            result = result.replacingOccurrences(of: "\u{E000}\(index)\u{E001}", with: span)
+        }
+
         if result.hasSuffix("  ") {
             result = String(result.dropLast(2)) + "<br>"
         }
 
         return result
+    }
+
+    private static func extractInlineMath(_ text: String) -> (String, [String]) {
+        guard let regex = try? NSRegularExpression(
+            pattern: "\\$\\$([^$\\n]+?)\\$\\$|\\$(?!\\s)([^$\\n]+?)(?<!\\s)\\$"
+        ) else {
+            return (text, [])
+        }
+        let ns = text as NSString
+        let fullRange = NSRange(location: 0, length: ns.length)
+        var result = ""
+        var cursor = 0
+        var spans: [String] = []
+
+        regex.enumerateMatches(in: text, range: fullRange) { match, _, _ in
+            guard let match, match.range.location >= cursor else { return }
+            if match.range.location > cursor {
+                result += ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
+            }
+            let contentRange = match.range(at: 1).location != NSNotFound ? match.range(at: 1) : match.range(at: 2)
+            spans.append(ns.substring(with: contentRange))
+            result += "<span class=\"math-inline\">\u{E000}\(spans.count - 1)\u{E001}</span>"
+            cursor = match.range.location + match.range.length
+        }
+
+        if cursor < ns.length {
+            result += ns.substring(from: cursor)
+        }
+        return (result, spans)
     }
 
     private static func renderImages(_ text: String) -> String {
@@ -462,6 +508,14 @@ enum MarkdownConverter {
         return highlightCss() + css
     }
 
+    private static func katexCss() -> String {
+        guard let url = Bundle.main.url(forResource: "katex.min", withExtension: "css"),
+              let css = try? String(contentsOf: url, encoding: .utf8) else {
+            return ""
+        }
+        return css.replacingOccurrences(of: "url(fonts/", with: "url(appresource:///fonts/")
+    }
+
     private static func highlightCss() -> String {
         guard let lightURL = Bundle.main.url(forResource: "github.min", withExtension: "css"),
               let light = try? String(contentsOf: lightURL, encoding: .utf8) else {
@@ -475,11 +529,19 @@ enum MarkdownConverter {
         return css
     }
 
-    private static func scripts(hasMermaid: Bool, hasCode: Bool) -> String {
+    private static func scripts(hasMermaid: Bool, hasCode: Bool, hasMath: Bool) -> String {
         var scripts = "<script>\(script())</script>"
         if hasCode, let library = highlightLibrary() {
             scripts += "<script>\(library)</script>"
             scripts += "<script>\(highlightInitScript())</script>"
+        }
+        if hasMath {
+            if let library = katexLibrary() {
+                scripts += "<script>\(library)</script>"
+                scripts += "<script>\(mathInitScript())</script>"
+            } else {
+                scripts += "<script>window.__contentDone = true;</script>"
+            }
         }
         if hasMermaid {
             if let library = mermaidLibrary() {
@@ -490,6 +552,38 @@ enum MarkdownConverter {
             }
         }
         return scripts
+    }
+
+    private static func katexLibrary() -> String? {
+        guard let url = Bundle.main.url(forResource: "katex.min", withExtension: "js"),
+              let js = try? String(contentsOf: url, encoding: .utf8) else {
+            return nil
+        }
+        return js
+    }
+
+    private static func mathInitScript() -> String {
+        """
+        (function() {
+            var blocks = document.querySelectorAll('.math-inline, .math-block');
+            var complete = function() {
+                window.__contentDone = true;
+                if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.contentDone) {
+                    window.webkit.messageHandlers.contentDone.postMessage('');
+                }
+            };
+            if (!window.katex || !blocks.length) { complete(); return; }
+            blocks.forEach(function(el) {
+                try {
+                    katex.render(el.textContent, el, {
+                        displayMode: el.classList.contains('math-block'),
+                        throwOnError: false
+                    });
+                } catch (e) {}
+            });
+            complete();
+        })();
+        """
     }
 
     private static func highlightLibrary() -> String? {

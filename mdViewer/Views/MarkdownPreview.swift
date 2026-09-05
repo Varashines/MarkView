@@ -12,6 +12,7 @@ struct MarkdownPreview: NSViewRepresentable {
         let config = WKWebViewConfiguration()
         let resourceHandler = DocumentResourceHandler()
         config.setURLSchemeHandler(resourceHandler, forURLScheme: DocumentResourceHandler.scheme)
+        config.setURLSchemeHandler(BundleResourceHandler(), forURLScheme: BundleResourceHandler.scheme)
         config.userContentController.add(context.coordinator, name: "copyCode")
         config.userContentController.add(context.coordinator, name: "toggleTask")
         config.userContentController.add(context.coordinator, name: "contentDone")
