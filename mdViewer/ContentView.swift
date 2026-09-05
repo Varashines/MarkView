@@ -12,7 +12,7 @@ struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage("previewZoom") private var previewZoom = 1.0
     @State private var mode: ViewMode = .preview
-    @State private var isSidebarVisible = false
+    @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
     @State private var crossfade: Double = 0
 
     private var contentBackgroundColor: Color {
@@ -22,91 +22,78 @@ struct ContentView: View {
     }
 
     var body: some View {
-        mainLayout
-            .background(WindowChrome(colorScheme: colorScheme))
-            .frame(minWidth: 600, minHeight: 400)
-            .overlay(alignment: .bottomTrailing) {
-                StatusBar(store: store)
-                    .padding(.bottom, 12)
-                    .padding(.trailing, 14)
-            }
-            .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    if store.folderURL != nil {
-                        Button(action: { withAnimation(.easeInOut(duration: 0.15)) { isSidebarVisible.toggle() } }) {
-                            Image(systemName: "sidebar.left")
-                        }
-                        .help("Toggle Sidebar (⌘\\)")
-                    }
-                }
-                ToolbarItem(placement: .principal) {
-                    HStack(spacing: 6) {
-                        Text(store.fileURL?.lastPathComponent ?? "Untitled")
-                            .font(.headline)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        if let folderName = store.folderURL?.lastPathComponent {
-                            Text(folderName)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            FolderSidebar(store: store)
+                .navigationSplitViewColumnWidth(min: 180, ideal: 230, max: 400)
+        } detail: {
+            modeContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .toolbar {
+                    ToolbarItem(placement: .principal) {
+                        HStack(spacing: 6) {
+                            Text(store.fileURL?.lastPathComponent ?? "Untitled")
+                                .font(.headline)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
+                            if let folderName = store.folderURL?.lastPathComponent {
+                                Text(folderName)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
                         }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 4)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(Color.primary.opacity(0.08))
+                        )
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 4)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay(
-                        Capsule()
-                            .strokeBorder(Color.primary.opacity(0.08))
-                    )
-                }
-                ToolbarItemGroup(placement: .primaryAction) {
-                    Button(action: { toggleMode() }) {
-                        Label("Preview", systemImage: "eye")
-                            .font(.system(size: 12))
-                            .frame(width: 58)
-                            .contentShape(Rectangle())
-                            .foregroundStyle(mode == .preview ? Color.accentColor : Color.primary)
+                    ToolbarItemGroup(placement: .primaryAction) {
+                        Button(action: { toggleMode() }) {
+                            Label("Preview", systemImage: "eye")
+                                .font(.system(size: 12))
+                                .frame(width: 58)
+                                .contentShape(Rectangle())
+                                .foregroundStyle(mode == .preview ? Color.accentColor : Color.primary)
+                        }
+                        .help("Toggle Edit/Preview (⌘E)")
                     }
-                    .help("Toggle Edit/Preview (⌘E)")
                 }
-            }
-            .navigationTitle(store.fileURL?.lastPathComponent ?? "Untitled")
-            .navigationSubtitle(store.folderURL?.lastPathComponent ?? "")
-            .onChange(of: store.isDirty) { _, dirty in
-                NSApp.keyWindow?.isDocumentEdited = dirty
-            }
-            .dropDestination(for: URL.self) { urls, _ in
-                handleDrop(urls)
-            }
-            .onAppear {
-                handleLaunch()
-            }
-            .onChange(of: store.folderURL) { _, newValue in
-                if newValue != nil {
-                    isSidebarVisible = true
-                }
-            }
-            .modifier(AppCommandHandlers(
-                store: store,
-                mode: $mode,
-                toggleMode: toggleMode,
-                isSidebarVisible: $isSidebarVisible,
-                previewZoom: $previewZoom,
-                exportPDF: exportPDF
-            ))
-    }
-
-    private var mainLayout: some View {
-        HStack(spacing: 0) {
-            if store.folderURL != nil && isSidebarVisible {
-                FolderSidebar(store: store)
-                    .frame(width: 230)
-                Divider()
-            }
-            modeContent
+                .navigationTitle(store.fileURL?.lastPathComponent ?? "Untitled")
+                .navigationSubtitle(store.folderURL?.lastPathComponent ?? "")
         }
+        .background(WindowChrome(colorScheme: colorScheme))
+        .frame(minWidth: 600, minHeight: 400)
+        .overlay(alignment: .bottomTrailing) {
+            StatusBar(store: store)
+                .padding(.bottom, 12)
+                .padding(.trailing, 14)
+        }
+        .onChange(of: store.isDirty) { _, dirty in
+            NSApp.keyWindow?.isDocumentEdited = dirty
+        }
+        .dropDestination(for: URL.self) { urls, _ in
+            handleDrop(urls)
+        }
+        .onAppear {
+            handleLaunch()
+        }
+        .onChange(of: store.folderURL) { _, newValue in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                columnVisibility = (newValue != nil) ? .all : .detailOnly
+            }
+        }
+        .modifier(AppCommandHandlers(
+            store: store,
+            mode: $mode,
+            toggleMode: toggleMode,
+            columnVisibility: $columnVisibility,
+            previewZoom: $previewZoom,
+            exportPDF: exportPDF
+        ))
     }
 
     @ViewBuilder
@@ -165,7 +152,6 @@ struct ContentView: View {
     private func handleDrop(_ urls: [URL]) -> Bool {
         guard let url = urls.first else { return false }
         if url.hasDirectoryPath {
-            isSidebarVisible = true
             store.openFolder(at: url)
         } else {
             store.openFile(at: url)
@@ -179,7 +165,6 @@ struct ContentView: View {
             let url = URL(fileURLWithPath: path)
             var isDirectory: ObjCBool = false
             if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue {
-                isSidebarVisible = true
                 store.openFolder(at: url)
             } else {
                 store.openFile(at: url)
@@ -231,7 +216,7 @@ private struct AppCommandHandlers: ViewModifier {
     let store: DocumentStore
     @Binding var mode: ViewMode
     let toggleMode: () -> Void
-    @Binding var isSidebarVisible: Bool
+    @Binding var columnVisibility: NavigationSplitViewVisibility
     @Binding var previewZoom: Double
     let exportPDF: () -> Void
 
@@ -260,7 +245,9 @@ private struct AppCommandHandlers: ViewModifier {
                 exportPDF()
             }
             .onReceive(NotificationCenter.default.publisher(for: .toggleSidebarRequested)) { _ in
-                withAnimation(.easeInOut(duration: 0.15)) { isSidebarVisible.toggle() }
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: .toggleModeRequested)) { _ in
                 toggleMode()

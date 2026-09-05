@@ -16,12 +16,12 @@ struct FolderSidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
             searchField
-            Divider()
+                .padding(.horizontal, 10)
+                .padding(.top, 10)
+                .padding(.bottom, 4)
             content
         }
-        .background(Color(NSColor.controlBackgroundColor))
         .alert("Rename", isPresented: $showRenameAlert) {
             TextField("Name", text: $renameText)
             Button("Cancel", role: .cancel) {}
@@ -31,31 +31,12 @@ struct FolderSidebar: View {
         }
     }
 
-    private var header: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "folder")
-                .foregroundStyle(.secondary)
-            Text(store.folderURL?.lastPathComponent ?? "Folder")
-                .font(.headline)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Spacer()
-            Button(action: { store.rescanFolder() }) {
-                Image(systemName: "arrow.clockwise")
-            }
-            .buttonStyle(.borderless)
-            .help("Rescan folder")
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-    }
-
     private var searchField: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            TextField("Search in files", text: $searchText)
+            TextField("Search", text: $searchText)
                 .textFieldStyle(.plain)
                 .font(.callout)
             if isFiltering {
@@ -73,14 +54,12 @@ struct FolderSidebar: View {
                 }
             }
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 8)
         .padding(.vertical, 5)
         .background(
-            RoundedRectangle(cornerRadius: 6)
+            RoundedRectangle(cornerRadius: 7)
                 .fill(Color.primary.opacity(0.06))
         )
-        .padding(.horizontal, 10)
-        .padding(.bottom, 6)
     }
 
     @ViewBuilder
@@ -101,25 +80,38 @@ struct FolderSidebar: View {
                 }
             }
         )) {
-            ForEach(store.folderFiles) { entry in
-                row(for: entry)
-                    .tag(entry.url)
+            Section(header: sectionHeader) {
+                ForEach(store.folderFiles) { entry in
+                    row(for: entry)
+                        .tag(entry.url)
+                }
             }
         }
         .listStyle(.sidebar)
         .overlay {
             if store.folderFiles.isEmpty {
-                Text(store.isScanningFolder ? "Scanning…" : "No markdown files")
+                Text(store.isScanningFolder ? "Scanning…" : "No Markdown files")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
     }
 
+    private var sectionHeader: some View {
+        Text(store.folderURL?.lastPathComponent ?? "Folder")
+            .contextMenu {
+                Button("Rescan Folder") {
+                    store.rescanFolder()
+                }
+            }
+    }
+
     private var searchResultsList: some View {
         List {
-            ForEach(searchResults) { hit in
-                searchRow(for: hit)
+            Section(header: Text("Results")) {
+                ForEach(searchResults) { hit in
+                    searchRow(for: hit)
+                }
             }
         }
         .listStyle(.sidebar)
@@ -135,15 +127,20 @@ struct FolderSidebar: View {
     private func row(for entry: FolderScanner.Entry) -> some View {
         let fileName = entry.url.lastPathComponent
 
-        return VStack(alignment: .leading, spacing: 2) {
-            Text((fileName as NSString).deletingPathExtension)
-                .lineLimit(1)
-            if entry.relativePath != fileName {
-                Text(entry.relativePath)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+        return HStack(spacing: 6) {
+            Image(systemName: "doc.text")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text((fileName as NSString).deletingPathExtension)
                     .lineLimit(1)
-                    .truncationMode(.head)
+                if entry.relativePath != fileName {
+                    Text(entry.relativePath)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                }
             }
         }
         .contextMenu {
@@ -160,18 +157,23 @@ struct FolderSidebar: View {
 
     private func searchRow(for hit: FolderSearch.Hit) -> some View {
         Button(action: { store.openFile(at: hit.url) }) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text((hit.url.lastPathComponent as NSString).deletingPathExtension)
-                    .lineLimit(1)
-                HStack(spacing: 4) {
-                    Text("L\(hit.line)")
-                        .font(.caption2)
-                        .monospacedDigit()
-                        .foregroundStyle(.tertiary)
-                    Text(hit.snippet)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                Image(systemName: "text.magnifyingglass")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text((hit.url.lastPathComponent as NSString).deletingPathExtension)
                         .lineLimit(1)
+                    HStack(spacing: 4) {
+                        Text("L\(hit.line)")
+                            .font(.caption2)
+                            .monospacedDigit()
+                            .foregroundStyle(.tertiary)
+                        Text(hit.snippet)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
             }
         }
