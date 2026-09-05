@@ -44,7 +44,7 @@ final class DocumentResourceHandler: NSObject, WKURLSchemeHandler {
 
     func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {}
 
-    private static func mimeType(forExtension ext: String) -> String {
+    static func mimeType(forExtension ext: String) -> String {
         switch ext {
         case "png": return "image/png"
         case "jpg", "jpeg": return "image/jpeg"
@@ -54,7 +54,52 @@ final class DocumentResourceHandler: NSObject, WKURLSchemeHandler {
         case "bmp": return "image/bmp"
         case "pdf": return "application/pdf"
         case "txt": return "text/plain"
+        case "woff2": return "font/woff2"
+        case "woff": return "font/woff"
+        case "ttf": return "font/ttf"
+        case "otf": return "font/otf"
         default: return "application/octet-stream"
         }
     }
+}
+
+final class BundleResourceHandler: NSObject, WKURLSchemeHandler {
+    static let scheme = "appresource"
+
+    func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
+        guard let url = urlSchemeTask.request.url,
+              let root = Bundle.main.resourceURL?.standardizedFileURL else {
+            urlSchemeTask.didFailWithError(URLError(.fileDoesNotExist))
+            return
+        }
+
+        let path = url.path
+        guard path.count > 1 else {
+            urlSchemeTask.didFailWithError(URLError(.fileDoesNotExist))
+            return
+        }
+
+        let candidate = root.appendingPathComponent(String(path.dropFirst())).standardizedFileURL
+        guard candidate.path.hasPrefix(root.path),
+              let data = try? Data(contentsOf: candidate) else {
+            urlSchemeTask.didFailWithError(URLError(.fileDoesNotExist))
+            return
+        }
+
+        let headers = [
+            "Content-Type": DocumentResourceHandler.mimeType(forExtension: candidate.pathExtension.lowercased()),
+            "Content-Length": "\(data.count)",
+            "Cache-Control": "no-cache"
+        ]
+        guard let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: headers) else {
+            urlSchemeTask.didFailWithError(URLError(.badServerResponse))
+            return
+        }
+
+        urlSchemeTask.didReceive(response)
+        urlSchemeTask.didReceive(data)
+        urlSchemeTask.didFinish()
+    }
+
+    func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {}
 }

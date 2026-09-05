@@ -28,6 +28,7 @@ final class PDFExporter: NSObject {
         let handler = DocumentResourceHandler()
         handler.baseURL = resourceBase
         config.setURLSchemeHandler(handler, forURLScheme: DocumentResourceHandler.scheme)
+        config.setURLSchemeHandler(BundleResourceHandler(), forURLScheme: BundleResourceHandler.scheme)
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.underPageBackgroundColor = .clear
         self.webView = webView
