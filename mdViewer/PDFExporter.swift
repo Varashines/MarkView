@@ -106,7 +106,10 @@ extension PDFExporter: WKNavigationDelegate {
         printInfo.leftMargin = 0
         printInfo.rightMargin = 0
         printInfo.horizontalPagination = .clip
-        printInfo.verticalPagination = .automatic
+        // .fit guarantees a single page: if the print layout runs a few points taller
+        // than the screen measurement, the content scales down imperceptibly instead
+        // of spilling onto a sliver page. Oversized documents paginate as a fallback.
+        printInfo.verticalPagination = paperHeight > maxHeight ? .automatic : .fit
         printInfo.isHorizontallyCentered = false
         printInfo.isVerticallyCentered = false
 
