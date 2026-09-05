@@ -93,8 +93,10 @@ extension PDFExporter: WKNavigationDelegate {
         defer { finish() }
 
         // 860 CSS px wide layout at 96dpi → 645pt; 1px = 0.75pt with zero scaling.
+        // A small height cushion absorbs rounding so the tail never spills onto a
+        // second sliver page.
         let paperWidth: CGFloat = 645
-        let paperHeight = cssHeight * 0.75
+        let paperHeight = cssHeight * 0.75 + 12
         let maxHeight: CGFloat = 14_390
 
         let printInfo = NSPrintInfo.shared.copy() as? NSPrintInfo ?? NSPrintInfo.shared
