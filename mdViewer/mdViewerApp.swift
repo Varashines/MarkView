@@ -38,6 +38,8 @@ struct mdViewerApp: App {
                     .keyboardShortcut("s")
                 Button("Export as PDF…") { post(.exportPDFRequested) }
                     .keyboardShortcut("p", modifiers: [.command, .shift])
+                Button("Export as Single-Page PDF…") { post(.exportSinglePagePDFRequested) }
+                    .keyboardShortcut("e", modifiers: [.command, .shift])
                 Divider()
                 Menu("Open Recent") {
                     if recentFiles.isEmpty && recentFolders.isEmpty {
@@ -110,6 +112,7 @@ extension Notification.Name {
     static let openFolderRequested = Notification.Name("openFolderRequested")
     static let saveRequested = Notification.Name("saveRequested")
     static let exportPDFRequested = Notification.Name("exportPDFRequested")
+    static let exportSinglePagePDFRequested = Notification.Name("exportSinglePagePDFRequested")
     static let toggleSidebarRequested = Notification.Name("toggleSidebarRequested")
     static let toggleModeRequested = Notification.Name("toggleModeRequested")
     static let findRequested = Notification.Name("findRequested")

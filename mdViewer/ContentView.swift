@@ -92,7 +92,7 @@ struct ContentView: View {
             toggleMode: toggleMode,
             columnVisibility: $columnVisibility,
             previewZoom: $previewZoom,
-            exportPDF: exportPDF
+            exportPDF: { exportPDF(singlePage: $0) }
         ))
     }
 
@@ -201,14 +201,19 @@ struct ContentView: View {
         )
     }
 
-    private func exportPDF() {
+    private func exportPDF(singlePage: Bool = false) {
         guard !store.text.isEmpty else {
             store.status = "No content to export"
             return
         }
         let html = MarkdownConverter.html(from: store.text)
         let window = NSApp.keyWindow
-        PDFExporter.export(from: html, window: window, resourceBase: store.fileURL?.deletingLastPathComponent())
+        PDFExporter.export(
+            from: html,
+            window: window,
+            resourceBase: store.fileURL?.deletingLastPathComponent(),
+            mode: singlePage ? .continuous : .paginated
+        )
     }
 }
 
@@ -218,7 +223,7 @@ private struct AppCommandHandlers: ViewModifier {
     let toggleMode: () -> Void
     @Binding var columnVisibility: NavigationSplitViewVisibility
     @Binding var previewZoom: Double
-    let exportPDF: () -> Void
+    let exportPDF: (_ singlePage: Bool) -> Void
 
     func body(content: Content) -> some View {
         content
@@ -241,9 +246,12 @@ private struct AppCommandHandlers: ViewModifier {
             .onReceive(NotificationCenter.default.publisher(for: .saveRequested)) { _ in
                 store.save()
             }
-            .onReceive(NotificationCenter.default.publisher(for: .exportPDFRequested)) { _ in
-                exportPDF()
-            }
+        .onReceive(NotificationCenter.default.publisher(for: .exportPDFRequested)) { _ in
+            exportPDF(false)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .exportSinglePagePDFRequested)) { _ in
+            exportPDF(true)
+        }
             .onReceive(NotificationCenter.default.publisher(for: .toggleSidebarRequested)) { _ in
                 withAnimation(.easeInOut(duration: 0.15)) {
                     columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
