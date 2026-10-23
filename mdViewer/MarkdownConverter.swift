@@ -33,7 +33,7 @@ private struct HeadingSlugger {
 
 private func stripMathTokens(_ text: String) -> String {
     text.replacingOccurrences(
-        of: "\u{F0000}[BI]\\d+\u{F0001}",
+        of: "\u{F0000}[BI]\\d+\u{F0001}|\u{F0002}[FR]\\d+\u{F0003}",
         with: "",
         options: .regularExpression
     )
@@ -76,6 +76,33 @@ private func exportedImageSource(_ source: String, baseURL: URL?) -> String {
         return "data:\(mime);base64,\(data.base64EncodedString())"
     }
     return fileURL.absoluteString
+}
+
+private func calloutInfo(in html: String) -> (kind: String, title: String, content: String)? {
+    let pattern = "^(<p>\\s*)(\\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\\])"
+    guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+        return nil
+    }
+    let ns = html as NSString
+    guard let match = regex.firstMatch(in: html, range: NSRange(location: 0, length: ns.length)),
+          let range = Range(match.range(at: 2), in: html) else {
+        return nil
+    }
+
+    let kind = ns.substring(with: match.range(at: 3)).lowercased()
+    let titles = [
+        "note": "Note",
+        "tip": "Tip",
+        "important": "Important",
+        "warning": "Warning",
+        "caution": "Caution"
+    ]
+
+    var content = html
+    content.removeSubrange(range)
+    content = content.replacingOccurrences(of: "<p>\n", with: "<p>")
+    content = content.replacingOccurrences(of: "<p><br>\n", with: "<p>")
+    return (kind, titles[kind] ?? kind.capitalized, content)
 }
 
 private func plainText(from markup: Markup) -> String {
@@ -135,18 +162,21 @@ enum MarkdownConverter {
     }
 
     private static func buildHTML(from markdown: String, baseURL: URL?, exportMode: Bool) -> String {
-        let source = strippingFrontMatter(from: markdown)
+        let stripped = strippingFrontMatter(from: markdown)
+        let (source, footnotes) = extractFootnotes(from: stripped)
         let (processed, mathItems) = extractMath(from: source)
         let document = Document(parsing: processed, options: .disableSmartOpts)
         var renderer = HTMLRenderer()
         renderer.exportMode = exportMode
         renderer.imageBaseURL = baseURL
         let rendered = renderer.render(document)
-        let body = replacingMathTokens(in: rendered, items: mathItems)
+        var body = replacingMathTokens(in: rendered, items: mathItems)
+        body = replacingFootnoteTokens(in: body, footnotes: footnotes)
+        body += footnotesSection(footnotes, exportMode: exportMode, baseURL: baseURL)
 
         let hasMermaid = body.contains("<div class=\"mermaid\">")
         let hasCode = body.contains("<pre")
-        let hasMath = !mathItems.isEmpty
+        let hasMath = !mathItems.isEmpty || footnotes.values.contains { $0.text.contains("$") }
         let scripts = Self.scripts(hasMermaid: hasMermaid, hasCode: hasCode, hasMath: hasMath)
         let styleContent: String
         if hasMath {
@@ -170,7 +200,8 @@ enum MarkdownConverter {
     }
 
     static func outline(from markdown: String) -> [MarkdownHeading] {
-        let source = strippingFrontMatter(from: markdown)
+        let stripped = strippingFrontMatter(from: markdown)
+        let (source, _) = extractFootnotes(from: stripped)
         let (processed, _) = extractMath(from: source)
         let document = Document(parsing: processed, options: .disableSmartOpts)
         var slugger = HeadingSlugger()
@@ -397,6 +428,232 @@ enum MarkdownConverter {
         }
 
         return result
+    }
+
+    private struct FootnoteDefinition {
+        let id: String
+        let text: String
+    }
+
+    private static func footnoteDefinition(from line: String) -> FootnoteDefinition? {
+        let pattern = "^\\s{0,3}\\[\\^([^\\]]+)\\]:\\s*(.*)$"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let ns = line as NSString
+        guard let match = regex.firstMatch(in: line, range: NSRange(location: 0, length: ns.length)),
+              let idRange = Range(match.range(at: 1), in: line),
+              let textRange = Range(match.range(at: 2), in: line) else {
+            return nil
+        }
+        return FootnoteDefinition(id: String(line[idRange]), text: String(line[textRange]))
+    }
+
+    private static func footnoteToken(_ number: Int, first: Bool) -> String {
+        "\u{F0002}\(first ? "F" : "R")\(number)\u{F0003}"
+    }
+
+    private static func footnoteAnchor(_ id: String, number: Int) -> String {
+        let cleaned = id.unicodeScalars.map { scalar -> String in
+            let value = scalar.value
+            if (48...57).contains(value) || (65...90).contains(value)
+                || (97...122).contains(value) || value == 45 || value == 95 {
+                return String(scalar)
+            }
+            return "-"
+        }.joined()
+        return (cleaned.isEmpty ? "note" : cleaned) + "-\(number)"
+    }
+
+    private static func extractFootnotes(
+        from markdown: String
+    ) -> (String, [Int: (id: String, text: String)]) {
+        let lines = markdown.components(separatedBy: "\n")
+        var definitions: [String: String] = [:]
+        var cleanedLines: [String] = []
+        var fence: (character: Character, length: Int)?
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if let current = fence {
+                cleanedLines.append(line)
+                if isClosingFence(trimmed, character: current.character, length: current.length) {
+                    fence = nil
+                }
+                continue
+            }
+            if let opening = fenceOpening(trimmed) {
+                fence = opening
+                cleanedLines.append(line)
+                continue
+            }
+            if let definition = footnoteDefinition(from: line) {
+                definitions[definition.id] = definition.text
+                cleanedLines.append("")
+                continue
+            }
+            cleanedLines.append(line)
+        }
+
+        var numbers: [String: Int] = [:]
+        var ordered: [Int: (id: String, text: String)] = [:]
+        var nextNumber = 0
+        var output: [String] = []
+        fence = nil
+
+        for line in cleanedLines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if let current = fence {
+                output.append(line)
+                if isClosingFence(trimmed, character: current.character, length: current.length) {
+                    fence = nil
+                }
+                continue
+            }
+            if let opening = fenceOpening(trimmed) {
+                fence = opening
+                output.append(line)
+                continue
+            }
+            if line.hasPrefix("    ") || line.hasPrefix("\t") {
+                output.append(line)
+                continue
+            }
+            output.append(replaceFootnoteReferences(
+                in: line,
+                definitions: definitions,
+                numbers: &numbers,
+                ordered: &ordered,
+                nextNumber: &nextNumber
+            ))
+        }
+
+        return (output.joined(separator: "\n"), ordered)
+    }
+
+    private static func replaceFootnoteReferences(
+        in line: String,
+        definitions: [String: String],
+        numbers: inout [String: Int],
+        ordered: inout [Int: (id: String, text: String)],
+        nextNumber: inout Int
+    ) -> String {
+        var result = ""
+        var index = line.startIndex
+
+        while index < line.endIndex {
+            let character = line[index]
+
+            if character == "\\" {
+                let next = line.index(after: index)
+                result.append(character)
+                if next < line.endIndex {
+                    result.append(line[next])
+                    index = line.index(after: next)
+                } else {
+                    index = next
+                }
+                continue
+            }
+
+            if character == "`" {
+                let runEnd = line[index...].prefix(while: { $0 == "`" }).endIndex
+                let runLength = line.distance(from: index, to: runEnd)
+                var search = runEnd
+                var closed = false
+                while search < line.endIndex {
+                    if line[search] == "`" {
+                        let closeEnd = line[search...].prefix(while: { $0 == "`" }).endIndex
+                        if line.distance(from: search, to: closeEnd) == runLength {
+                            result += String(line[index..<closeEnd])
+                            index = closeEnd
+                            closed = true
+                            break
+                        }
+                        search = closeEnd
+                    } else {
+                        search = line.index(after: search)
+                    }
+                }
+                if !closed {
+                    result += String(line[index...])
+                    index = line.endIndex
+                }
+                continue
+            }
+
+            if character == "[" {
+                let caret = line.index(after: index)
+                if caret < line.endIndex, line[caret] == "^" {
+                    let idStart = line.index(after: caret)
+                    if let close = line[idStart...].firstIndex(of: "]") {
+                        let id = String(line[idStart..<close])
+                        if let text = definitions[id] {
+                            if let number = numbers[id] {
+                                result += footnoteToken(number, first: false)
+                            } else {
+                                nextNumber += 1
+                                numbers[id] = nextNumber
+                                ordered[nextNumber] = (id, text)
+                                result += footnoteToken(nextNumber, first: true)
+                            }
+                            index = line.index(after: close)
+                            continue
+                        }
+                    }
+                }
+            }
+
+            result.append(character)
+            index = line.index(after: index)
+        }
+
+        return result
+    }
+
+    private static func replacingFootnoteTokens(
+        in html: String,
+        footnotes: [Int: (id: String, text: String)]
+    ) -> String {
+        var result = html
+        for (number, definition) in footnotes {
+            let anchor = footnoteAnchor(definition.id, number: number)
+            let first = "<sup class=\"footnote-ref\" id=\"fnref-\(anchor)\"><a href=\"#fn-\(anchor)\">\(number)</a></sup>"
+            let repeated = "<sup class=\"footnote-ref\"><a href=\"#fn-\(anchor)\">\(number)</a></sup>"
+            result = result.replacingOccurrences(of: footnoteToken(number, first: true), with: first)
+            result = result.replacingOccurrences(of: footnoteToken(number, first: false), with: repeated)
+        }
+        return result
+    }
+
+    private static func footnotesSection(
+        _ footnotes: [Int: (id: String, text: String)],
+        exportMode: Bool,
+        baseURL: URL?
+    ) -> String {
+        guard !footnotes.isEmpty else { return "" }
+        var items = ""
+        for (number, definition) in footnotes.sorted(by: { $0.key < $1.key }) {
+            let anchor = footnoteAnchor(definition.id, number: number)
+            let content = renderFragment(definition.text, exportMode: exportMode, baseURL: baseURL)
+            let backref = "<a href=\"#fnref-\(anchor)\" class=\"footnote-backref\" aria-label=\"Back to reference\">↩</a>"
+
+            let withBackref: String
+            if let close = content.range(of: "</p>", options: .backwards) {
+                withBackref = content.replacingCharacters(in: close, with: " \(backref)</p>")
+            } else {
+                withBackref = content + backref
+            }
+            items += "<li id=\"fn-\(anchor)\">\(withBackref)</li>\n"
+        }
+        return "<section class=\"footnotes\">\n<ol>\n\(items)</ol>\n</section>\n"
+    }
+
+    private static func renderFragment(_ markdown: String, exportMode: Bool, baseURL: URL?) -> String {
+        let (processed, mathItems) = extractMath(from: markdown)
+        let document = Document(parsing: processed, options: .disableSmartOpts)
+        var renderer = HTMLRenderer()
+        renderer.exportMode = exportMode
+        renderer.imageBaseURL = baseURL
+        return replacingMathTokens(in: renderer.render(document), items: mathItems)
     }
 
     private static func fenceOpening(_ trimmed: String) -> (character: Character, length: Int)? {
@@ -716,9 +973,17 @@ private struct HTMLRenderer {
         case let heading as Heading:
             let title = stripMathTokens(plainText(from: heading))
             let id = slugger.id(for: title)
-            return "<h\(heading.level) id=\"\(id)\">\(renderChildren(heading, inLink: inLink))</h\(heading.level)>\n"
+            let content = renderChildren(heading, inLink: inLink)
+            return "<h\(heading.level) id=\"\(id)\">\(content)<a class=\"heading-anchor\" href=\"#\(id)\" aria-label=\"Link to heading\">#</a></h\(heading.level)>\n"
         case let blockQuote as BlockQuote:
-            return "<blockquote>\n\(renderChildren(blockQuote, inLink: inLink))</blockquote>\n"
+            let content = renderChildren(blockQuote, inLink: inLink)
+            if let callout = calloutInfo(in: content) {
+                return "<div class=\"callout callout-\(callout.kind)\">"
+                    + "<div class=\"callout-title\">\(callout.title)</div>"
+                    + "<div class=\"callout-content\">\(callout.content)</div>"
+                    + "</div>\n"
+            }
+            return "<blockquote>\n\(content)</blockquote>\n"
         case let codeBlock as CodeBlock:
             let language = (codeBlock.language ?? "").trimmingCharacters(in: .whitespaces)
             if language.lowercased() == "mermaid" {
