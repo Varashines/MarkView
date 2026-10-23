@@ -1,9 +1,41 @@
 import Foundation
 import Markdown
 
+struct MarkdownHeading: Identifiable, Equatable, Sendable {
+    let id: String
+    let title: String
+    let level: Int
+}
+
 private struct MathItem {
     let latex: String
     let isBlock: Bool
+}
+
+private struct HeadingSlugger {
+    private var counts: [String: Int] = [:]
+
+    mutating func id(for text: String) -> String {
+        var slug = text.lowercased()
+        slug = slug.replacingOccurrences(of: "[^a-z0-9]+", with: "-", options: .regularExpression)
+        slug = slug.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        if slug.isEmpty { slug = "section" }
+
+        if let count = counts[slug] {
+            counts[slug] = count + 1
+            return "\(slug)-\(count)"
+        }
+        counts[slug] = 1
+        return slug
+    }
+}
+
+private func stripMathTokens(_ text: String) -> String {
+    text.replacingOccurrences(
+        of: "\u{F0000}[BI]\\d+\u{F0001}",
+        with: "",
+        options: .regularExpression
+    )
 }
 
 private func escapeHTMLEntities(_ text: String) -> String {
@@ -99,6 +131,33 @@ enum MarkdownConverter {
         \(scripts)
         </html>
         """
+    }
+
+    static func outline(from markdown: String) -> [MarkdownHeading] {
+        let source = strippingFrontMatter(from: markdown)
+        let (processed, _) = extractMath(from: source)
+        let document = Document(parsing: processed, options: .disableSmartOpts)
+        var slugger = HeadingSlugger()
+        var headings: [MarkdownHeading] = []
+
+        func walk(_ markup: Markup) {
+            if let heading = markup as? Heading {
+                let rawTitle = plainText(from: heading).trimmingCharacters(in: .whitespacesAndNewlines)
+                let displayTitle = stripMathTokens(rawTitle)
+                    .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                headings.append(MarkdownHeading(
+                    id: slugger.id(for: displayTitle),
+                    title: displayTitle.isEmpty ? "Section" : displayTitle,
+                    level: heading.level
+                ))
+            }
+            for child in markup.children {
+                walk(child)
+            }
+        }
+
+        walk(document)
+        return headings
     }
 
     private static func strippingFrontMatter(from markdown: String) -> String {
@@ -547,7 +606,7 @@ enum MarkdownConverter {
 }
 
 private struct HTMLRenderer {
-    private var headingIDs: [String: Int] = [:]
+    private var slugger = HeadingSlugger()
     private var tableAlignments: [Table.ColumnAlignment?] = []
     private var tableColumn = 0
     private var inTableHead = false
@@ -563,7 +622,8 @@ private struct HTMLRenderer {
         case let paragraph as Paragraph:
             return "<p>\(renderChildren(paragraph, inLink: inLink))</p>\n"
         case let heading as Heading:
-            let id = headingID(for: heading)
+            let title = stripMathTokens(plainText(from: heading))
+            let id = slugger.id(for: title)
             return "<h\(heading.level) id=\"\(id)\">\(renderChildren(heading, inLink: inLink))</h\(heading.level)>\n"
         case let blockQuote as BlockQuote:
             return "<blockquote>\n\(renderChildren(blockQuote, inLink: inLink))</blockquote>\n"
@@ -685,19 +745,5 @@ private struct HTMLRenderer {
 
     private mutating func renderChildren(_ markup: Markup, inLink: Bool) -> String {
         markup.children.map { render($0, inLink: inLink) }.joined()
-    }
-
-    private mutating func headingID(for heading: Heading) -> String {
-        var slug = plainText(from: heading).lowercased()
-        slug = slug.replacingOccurrences(of: "[^a-z0-9]+", with: "-", options: .regularExpression)
-        slug = slug.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
-        if slug.isEmpty { slug = "section" }
-
-        if let count = headingIDs[slug] {
-            headingIDs[slug] = count + 1
-            return "\(slug)-\(count)"
-        }
-        headingIDs[slug] = 1
-        return slug
     }
 }

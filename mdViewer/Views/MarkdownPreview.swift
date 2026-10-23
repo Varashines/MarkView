@@ -9,6 +9,8 @@ struct MarkdownPreview: NSViewRepresentable {
     var findQuery: String = ""
     var findGeneration: Int = 0
     var findForward: Bool = true
+    var scrollToHeadingID: String?
+    var scrollToHeadingGeneration: Int = 0
     var onToggleTask: ((Int, Bool) -> Void)?
     var onFindResult: ((Bool) -> Void)?
 
@@ -37,12 +39,14 @@ struct MarkdownPreview: NSViewRepresentable {
         }
         guard context.coordinator.lastMarkdownText != text else {
             context.coordinator.applyFind(to: nsView)
+            context.coordinator.applyScroll(to: nsView)
             return
         }
         if context.coordinator.skipNextLoad {
             context.coordinator.skipNextLoad = false
             context.coordinator.lastMarkdownText = text
             context.coordinator.applyFind(to: nsView)
+            context.coordinator.applyScroll(to: nsView)
             return
         }
         context.coordinator.lastMarkdownText = text
@@ -73,6 +77,7 @@ struct MarkdownPreview: NSViewRepresentable {
         private var lastFindQuery: String?
         private var lastFindGeneration = -1
         private var lastFindForward = true
+        private var lastScrollGeneration = -1
 
         init(parent: MarkdownPreview) {
             self.parent = parent
@@ -103,13 +108,36 @@ struct MarkdownPreview: NSViewRepresentable {
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             applyFind(to: webView)
-            guard loadVersion != restoredVersion else { return }
+            let pendingScroll = hasPendingScroll
+            guard loadVersion != restoredVersion else {
+                if pendingScroll { applyScroll(to: webView) }
+                return
+            }
             restoredVersion = loadVersion
             let y = savedScrollY
-            guard y > 0 else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                webView.evaluateJavaScript("window.scrollTo(0, \(y))")
+            guard pendingScroll || y > 0 else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self, weak webView] in
+                guard let self, let webView else { return }
+                if self.hasPendingScroll {
+                    self.applyScroll(to: webView)
+                } else {
+                    webView.evaluateJavaScript("window.scrollTo(0, \(y))")
+                }
             }
+        }
+
+        private var hasPendingScroll: Bool {
+            guard let id = parent.scrollToHeadingID, !id.isEmpty else { return false }
+            return parent.scrollToHeadingGeneration != lastScrollGeneration
+        }
+
+        func applyScroll(to webView: WKWebView) {
+            guard hasPendingScroll, let id = parent.scrollToHeadingID else { return }
+            lastScrollGeneration = parent.scrollToHeadingGeneration
+            let escapedID = id.replacingOccurrences(of: "'", with: "\\'")
+            webView.evaluateJavaScript(
+                "document.getElementById('\(escapedID)')?.scrollIntoView({behavior: 'smooth', block: 'start'});"
+            )
         }
 
         func resetFind() {

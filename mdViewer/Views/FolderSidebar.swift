@@ -2,6 +2,16 @@ import SwiftUI
 
 struct FolderSidebar: View {
     @ObservedObject var store: DocumentStore
+    var outline: [MarkdownHeading] = []
+    var onSelectHeading: ((String) -> Void)?
+
+    private enum SidebarTab: String, CaseIterable, Identifiable {
+        case files = "Files"
+        case outline = "Outline"
+        var id: String { rawValue }
+    }
+
+    @State private var selectedTab: SidebarTab = .files
     @State private var searchText = ""
     @State private var searchResults: [FolderSearch.Hit] = []
     @State private var isSearching = false
@@ -16,10 +26,22 @@ struct FolderSidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            searchField
-                .padding(.horizontal, 10)
-                .padding(.top, 10)
-                .padding(.bottom, 4)
+            Picker("Sidebar", selection: $selectedTab) {
+                ForEach(SidebarTab.allCases) { tab in
+                    Text(tab.rawValue).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 10)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
+
+            if selectedTab == .files {
+                searchField
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 4)
+            }
             content
         }
         .alert("Rename", isPresented: $showRenameAlert) {
@@ -64,10 +86,43 @@ struct FolderSidebar: View {
 
     @ViewBuilder
     private var content: some View {
-        if isFiltering {
+        if selectedTab == .outline {
+            outlineList
+        } else if isFiltering {
             searchResultsList
         } else {
             fileList
+        }
+    }
+
+    private var outlineList: some View {
+        List {
+            ForEach(outline) { heading in
+                Button {
+                    onSelectHeading?(heading.id)
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("H\(heading.level)")
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.tertiary)
+                            .frame(width: 22, alignment: .leading)
+                        Text(heading.title)
+                            .font(.callout)
+                            .lineLimit(2)
+                    }
+                    .padding(.leading, CGFloat(max(0, heading.level - 1)) * 10)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .listStyle(.sidebar)
+        .overlay {
+            if outline.isEmpty {
+                Text("No headings")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

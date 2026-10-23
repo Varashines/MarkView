@@ -19,6 +19,9 @@ struct ContentView: View {
     @State private var findGeneration = 0
     @State private var findForward = true
     @State private var findMatchFound: Bool?
+    @State private var outline: [MarkdownHeading] = []
+    @State private var scrollHeadingID: String?
+    @State private var scrollHeadingGeneration = 0
     @FocusState private var findFieldFocused: Bool
 
     private var contentBackgroundColor: Color {
@@ -29,8 +32,14 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            FolderSidebar(store: store)
-                .navigationSplitViewColumnWidth(min: 180, ideal: 230, max: 400)
+            FolderSidebar(
+                store: store,
+                outline: outline,
+                onSelectHeading: { id in
+                    scrollToHeading(id)
+                }
+            )
+            .navigationSplitViewColumnWidth(min: 180, ideal: 230, max: 400)
         } detail: {
             modeContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -86,6 +95,20 @@ struct ContentView: View {
         }
         .onAppear {
             handleLaunch()
+        }
+        .task(id: store.text) {
+            let text = store.text
+            guard !text.isEmpty else {
+                outline = []
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(200))
+            guard !Task.isCancelled else { return }
+            let headings = await Task.detached(priority: .userInitiated) {
+                MarkdownConverter.outline(from: text)
+            }.value
+            guard !Task.isCancelled else { return }
+            outline = headings
         }
         .onChange(of: store.folderURL) { _, newValue in
             withAnimation(.easeInOut(duration: 0.15)) {
@@ -149,6 +172,8 @@ struct ContentView: View {
             findQuery: findQuery,
             findGeneration: findGeneration,
             findForward: findForward,
+            scrollToHeadingID: scrollHeadingID,
+            scrollToHeadingGeneration: scrollHeadingGeneration,
             onToggleTask: { line, checked in
                 var lines = store.text.components(separatedBy: .newlines)
                 guard line >= 0, line < lines.count else { return }
@@ -257,6 +282,15 @@ struct ContentView: View {
         findQuery = ""
         findMatchFound = nil
         findGeneration += 1
+    }
+
+    private func scrollToHeading(_ id: String) {
+        if mode != .preview {
+            mode = .preview
+            crossfade = 0
+        }
+        scrollHeadingID = id
+        scrollHeadingGeneration += 1
     }
 
     private func handleDrop(_ urls: [URL]) -> Bool {
