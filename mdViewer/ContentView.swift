@@ -1,6 +1,7 @@
 import SwiftUI
 import WebKit
 import AppKit
+import UniformTypeIdentifiers
 
 enum ViewMode {
     case edit
@@ -176,6 +177,7 @@ struct ContentView: View {
             columnVisibility: $columnVisibility,
             previewZoom: $previewZoom,
             exportPDF: { exportPDF(singlePage: $0) },
+            exportHTML: exportHTML,
             beginPreviewFind: beginFind,
             toggleSplit: toggleSplit
         ))
@@ -455,6 +457,29 @@ struct ContentView: View {
         return ns.replacingCharacters(in: match.range(at: 2), with: checked ? "x" : " ")
     }
 
+    private func exportHTML() {
+        guard !store.text.isEmpty else {
+            store.status = "No content to export"
+            return
+        }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.html]
+        let baseName = store.fileURL?.deletingPathExtension().lastPathComponent ?? "Untitled"
+        panel.nameFieldStringValue = baseName + ".html"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        let html = MarkdownConverter.exportedHTML(
+            from: store.text,
+            baseURL: store.fileURL?.deletingLastPathComponent()
+        )
+        do {
+            try html.write(to: url, atomically: true, encoding: .utf8)
+            store.status = "Exported HTML"
+        } catch {
+            store.status = "Failed to export HTML: \(error.localizedDescription)"
+        }
+    }
+
     private func exportPDF(singlePage: Bool = false) {
         guard !store.text.isEmpty else {
             store.status = "No content to export"
@@ -478,6 +503,7 @@ private struct AppCommandHandlers: ViewModifier {
     @Binding var columnVisibility: NavigationSplitViewVisibility
     @Binding var previewZoom: Double
     let exportPDF: (_ singlePage: Bool) -> Void
+    let exportHTML: () -> Void
     let beginPreviewFind: () -> Void
     let toggleSplit: () -> Void
 
@@ -510,6 +536,9 @@ private struct AppCommandHandlers: ViewModifier {
         }
         .onReceive(NotificationCenter.default.publisher(for: .exportSinglePagePDFRequested)) { _ in
             exportPDF(true)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .exportHTMLRequested)) { _ in
+            exportHTML()
         }
             .onReceive(NotificationCenter.default.publisher(for: .toggleSidebarRequested)) { _ in
                 withAnimation(.easeInOut(duration: 0.15)) {

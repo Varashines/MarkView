@@ -1,10 +1,34 @@
 import SwiftUI
+import Darwin
 
 @main
 struct mdViewerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @AppStorage(RecentItems.filesKey) private var recentFilesData: Data = Data()
     @AppStorage(RecentItems.foldersKey) private var recentFoldersData: Data = Data()
+
+    init() {
+        let arguments = CommandLine.arguments
+        guard let flag = arguments.firstIndex(of: "--export-html"),
+              flag + 2 < arguments.count else {
+            return
+        }
+        let inputURL = URL(fileURLWithPath: arguments[flag + 1])
+        let outputURL = URL(fileURLWithPath: arguments[flag + 2])
+        guard let markdown = try? String(contentsOf: inputURL, encoding: .utf8) else {
+            exit(1)
+        }
+        let html = MarkdownConverter.exportedHTML(
+            from: markdown,
+            baseURL: inputURL.deletingLastPathComponent()
+        )
+        do {
+            try html.write(to: outputURL, atomically: true, encoding: .utf8)
+            exit(0)
+        } catch {
+            exit(1)
+        }
+    }
 
     private var recentFiles: [URL] {
         (try? JSONDecoder().decode([URL].self, from: recentFilesData)) ?? []
@@ -42,6 +66,8 @@ struct mdViewerApp: App {
                     .keyboardShortcut("p", modifiers: [.command, .shift])
                 Button("Export as Single-Page PDF…") { post(.exportSinglePagePDFRequested) }
                     .keyboardShortcut("e", modifiers: [.command, .shift])
+                Button("Export as HTML…") { post(.exportHTMLRequested) }
+                    .keyboardShortcut("h", modifiers: [.command, .shift])
                 Divider()
                 Menu("Open Recent") {
                     if recentFiles.isEmpty && recentFolders.isEmpty {
@@ -118,6 +144,7 @@ extension Notification.Name {
     static let reloadFromDiskRequested = Notification.Name("reloadFromDiskRequested")
     static let exportPDFRequested = Notification.Name("exportPDFRequested")
     static let exportSinglePagePDFRequested = Notification.Name("exportSinglePagePDFRequested")
+    static let exportHTMLRequested = Notification.Name("exportHTMLRequested")
     static let toggleSidebarRequested = Notification.Name("toggleSidebarRequested")
     static let toggleModeRequested = Notification.Name("toggleModeRequested")
     static let toggleSplitRequested = Notification.Name("toggleSplitRequested")

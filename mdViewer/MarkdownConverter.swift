@@ -1,5 +1,6 @@
 import Foundation
 import Markdown
+import UniformTypeIdentifiers
 
 struct MarkdownHeading: Identifiable, Equatable, Sendable {
     let id: String
@@ -57,6 +58,26 @@ private func resolveImageSource(_ source: String) -> String {
     return "mdresource:///\(encoded)"
 }
 
+private func exportedImageSource(_ source: String, baseURL: URL?) -> String {
+    let trimmed = source.trimmingCharacters(in: .whitespaces)
+    let lower = trimmed.lowercased()
+    if lower.hasPrefix("http://") || lower.hasPrefix("https://") || lower.hasPrefix("data:") {
+        return trimmed
+    }
+    guard let baseURL else { return trimmed }
+
+    let relative = trimmed.hasPrefix("/") ? String(trimmed.dropFirst()) : trimmed
+    let decoded = relative.removingPercentEncoding ?? relative
+    let fileURL = baseURL.appendingPathComponent(decoded)
+
+    if let data = try? Data(contentsOf: fileURL), data.count <= 8_000_000 {
+        let mime = UTType(filenameExtension: fileURL.pathExtension)?.preferredMIMEType
+            ?? "application/octet-stream"
+        return "data:\(mime);base64,\(data.base64EncodedString())"
+    }
+    return fileURL.absoluteString
+}
+
 private func plainText(from markup: Markup) -> String {
     if let text = markup as? Text { return text.string }
     if let code = markup as? InlineCode { return code.code }
@@ -106,10 +127,20 @@ private func linkifyText(_ text: String) -> String {
 
 enum MarkdownConverter {
     static func html(from markdown: String) -> String {
+        buildHTML(from: markdown, baseURL: nil, exportMode: false)
+    }
+
+    static func exportedHTML(from markdown: String, baseURL: URL?) -> String {
+        buildHTML(from: markdown, baseURL: baseURL, exportMode: true)
+    }
+
+    private static func buildHTML(from markdown: String, baseURL: URL?, exportMode: Bool) -> String {
         let source = strippingFrontMatter(from: markdown)
         let (processed, mathItems) = extractMath(from: source)
         let document = Document(parsing: processed, options: .disableSmartOpts)
         var renderer = HTMLRenderer()
+        renderer.exportMode = exportMode
+        renderer.imageBaseURL = baseURL
         let rendered = renderer.render(document)
         let body = replacingMathTokens(in: rendered, items: mathItems)
 
@@ -117,7 +148,12 @@ enum MarkdownConverter {
         let hasCode = body.contains("<pre")
         let hasMath = !mathItems.isEmpty
         let scripts = Self.scripts(hasMermaid: hasMermaid, hasCode: hasCode, hasMath: hasMath)
-        let styleContent = hasMath ? css() + katexCss() : css()
+        let styleContent: String
+        if hasMath {
+            styleContent = css() + (exportMode ? exportedKatexCss() : katexCss())
+        } else {
+            styleContent = css()
+        }
 
         return """
         <!DOCTYPE html>
@@ -404,12 +440,51 @@ enum MarkdownConverter {
         return highlightCss() + css
     }
 
-    private static func katexCss() -> String {
+    private static func katexCSSText() -> String {
         guard let url = Bundle.main.url(forResource: "katex.min", withExtension: "css"),
               let css = try? String(contentsOf: url, encoding: .utf8) else {
             return ""
         }
-        return css.replacingOccurrences(of: "url(fonts/", with: "url(appresource:///fonts/")
+        return css
+    }
+
+    private static func katexCss() -> String {
+        katexCSSText().replacingOccurrences(of: "url(fonts/", with: "url(appresource:///fonts/")
+    }
+
+    private static func exportedKatexCss() -> String {
+        var css = katexCSSText()
+        guard let regex = try? NSRegularExpression(pattern: "url\\(fonts/([^)]+)\\)") else {
+            return css
+        }
+
+        let matches = regex.matches(in: css, range: NSRange(location: 0, length: (css as NSString).length))
+        for match in matches.reversed() {
+            let fileName = (css as NSString).substring(with: match.range(at: 1))
+            let file = fileName as NSString
+            guard let url = Bundle.main.url(
+                forResource: file.deletingPathExtension,
+                withExtension: file.pathExtension,
+                subdirectory: "fonts"
+            ), let data = try? Data(contentsOf: url) else {
+                continue
+            }
+            let mime = fontMIME(for: file.pathExtension)
+            let replacement = "url(data:\(mime);base64,\(data.base64EncodedString()))"
+            css = (css as NSString).replacingCharacters(in: match.range, with: replacement)
+        }
+        return css
+    }
+
+    private static func fontMIME(for pathExtension: String) -> String {
+        switch pathExtension.lowercased() {
+        case "woff2": return "font/woff2"
+        case "woff": return "font/woff"
+        case "ttf": return "font/ttf"
+        case "otf": return "font/otf"
+        case "eot": return "application/vnd.ms-fontobject"
+        default: return "application/octet-stream"
+        }
     }
 
     private static func highlightCss() -> String {
@@ -621,6 +696,8 @@ enum MarkdownConverter {
 }
 
 private struct HTMLRenderer {
+    var exportMode = false
+    var imageBaseURL: URL?
     private var slugger = HeadingSlugger()
     private var tableAlignments: [Table.ColumnAlignment?] = []
     private var tableColumn = 0
@@ -739,7 +816,10 @@ private struct HTMLRenderer {
             }
             return "<a\(attributes)>\(renderChildren(link, inLink: true))</a>"
         case let image as Image:
-            let source = resolveImageSource(image.source ?? "")
+            let rawSource = image.source ?? ""
+            let source = exportMode
+                ? exportedImageSource(rawSource, baseURL: imageBaseURL)
+                : resolveImageSource(rawSource)
             var attributes = " src=\"\(escapeHTMLEntities(source))\" alt=\"\(escapeHTMLEntities(plainText(from: image)))\""
             if let title = image.title, !title.isEmpty {
                 attributes += " title=\"\(escapeHTMLEntities(title))\""
