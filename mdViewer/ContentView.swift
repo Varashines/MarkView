@@ -137,12 +137,8 @@ struct ContentView: View {
             onToggleTask: { line, checked in
                 var lines = store.text.components(separatedBy: .newlines)
                 guard line >= 0, line < lines.count else { return }
-                let current = lines[line]
-                if checked {
-                    lines[line] = current.replacingOccurrences(of: "- [ ]", with: "- [x]")
-                } else {
-                    lines[line] = current.replacingOccurrences(of: "- [x]", with: "- [ ]")
-                }
+                guard let updated = toggledTaskLine(lines[line], checked: checked) else { return }
+                lines[line] = updated
                 store.textChanged(lines.joined(separator: "\n"))
             }
         )
@@ -199,6 +195,15 @@ struct ContentView: View {
             get: { store.text },
             set: { store.textChanged($0) }
         )
+    }
+
+    private func toggledTaskLine(_ line: String, checked: Bool) -> String? {
+        let pattern = "^(\\s*(?:[-*+]|\\d{1,9}[.)])\\s+\\[)( |x|X)(\\])"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let ns = line as NSString
+        let range = NSRange(location: 0, length: ns.length)
+        guard let match = regex.firstMatch(in: line, range: range) else { return nil }
+        return ns.replacingCharacters(in: match.range(at: 2), with: checked ? "x" : " ")
     }
 
     private func exportPDF(singlePage: Bool = false) {

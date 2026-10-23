@@ -1,14 +1,92 @@
 import Foundation
+import Markdown
+
+private struct MathItem {
+    let latex: String
+    let isBlock: Bool
+}
+
+private func escapeHTMLEntities(_ text: String) -> String {
+    text.replacingOccurrences(of: "&", with: "&amp;")
+        .replacingOccurrences(of: "<", with: "&lt;")
+        .replacingOccurrences(of: ">", with: "&gt;")
+        .replacingOccurrences(of: "\"", with: "&quot;")
+        .replacingOccurrences(of: "'", with: "&#39;")
+}
+
+private func resolveImageSource(_ source: String) -> String {
+    let trimmed = source.trimmingCharacters(in: .whitespaces)
+    let lower = trimmed.lowercased()
+    if lower.hasPrefix("http://") || lower.hasPrefix("https://") || lower.hasPrefix("data:") || lower.hasPrefix("mdresource://") {
+        return trimmed
+    }
+    let relative = trimmed.hasPrefix("/") ? String(trimmed.dropFirst()) : trimmed
+    let encoded = relative.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? relative
+    return "mdresource:///\(encoded)"
+}
+
+private func plainText(from markup: Markup) -> String {
+    if let text = markup as? Text { return text.string }
+    if let code = markup as? InlineCode { return code.code }
+    if markup is SoftBreak || markup is LineBreak { return " " }
+    return markup.children.map(plainText).joined()
+}
+
+private func linkifyText(_ text: String) -> String {
+    guard let regex = try? NSRegularExpression(pattern: "https?://[^\\s<>]+") else {
+        return escapeHTMLEntities(text)
+    }
+    let ns = text as NSString
+    let fullRange = NSRange(location: 0, length: ns.length)
+    var result = ""
+    var cursor = 0
+
+    regex.enumerateMatches(in: text, range: fullRange) { match, _, _ in
+        guard let match, match.range.location >= cursor else { return }
+        if match.range.location > cursor {
+            result += escapeHTMLEntities(ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor)))
+        }
+
+        var url = ns.substring(with: match.range)
+        var trailing = ""
+        while let last = url.last, ".,;:!?".contains(last) {
+            trailing = String(last) + trailing
+            url.removeLast()
+        }
+        while url.hasSuffix(")") {
+            let opens = url.filter { $0 == "(" }.count
+            let closes = url.filter { $0 == ")" }.count
+            guard opens < closes else { break }
+            trailing = ")" + trailing
+            url.removeLast()
+        }
+
+        result += "<a href=\"\(escapeHTMLEntities(url))\">\(escapeHTMLEntities(url))</a>"
+        result += escapeHTMLEntities(trailing)
+        cursor = match.range.location + match.range.length
+    }
+
+    if cursor < ns.length {
+        result += escapeHTMLEntities(ns.substring(from: cursor))
+    }
+    return result
+}
 
 enum MarkdownConverter {
     static func html(from markdown: String) -> String {
-        let body = render(markdown)
-        let css = Self.css()
+        let source = strippingFrontMatter(from: markdown)
+        let (processed, mathItems) = extractMath(from: source)
+        let document = Document(parsing: processed, options: .disableSmartOpts)
+        var renderer = HTMLRenderer()
+        let rendered = renderer.render(document)
+        let body = replacingMathTokens(in: rendered, items: mathItems)
+
         let hasMermaid = body.contains("<div class=\"mermaid\">")
-        let hasCode = body.contains("<pre><code") || body.contains("<pre data-lang")
-        let hasMath = body.contains("<span class=\"math-inline\">") || body.contains("<div class=\"math-block\">")
+        let hasCode = body.contains("<pre")
+        let hasMath = !mathItems.isEmpty
         let scripts = Self.scripts(hasMermaid: hasMermaid, hasCode: hasCode, hasMath: hasMath)
-        let styleContent = hasMath ? css + katexCss() : css
+        let styleContent = hasMath ? css() + katexCss() : css()
+
         return """
         <!DOCTYPE html>
         <html>
@@ -22,484 +100,243 @@ enum MarkdownConverter {
         </html>
         """
     }
-    
-    private static func render(_ markdown: String) -> String {
-        let lines = markdown.components(separatedBy: .newlines)
-        var result: [String] = []
-        var i = 0
-        var inCodeBlock = false
-        var codeBuffer: [String] = []
-        
-        while i < lines.count {
-            let rawLine = lines[i]
-            
-            if rawLine.hasPrefix("```") {
-                if inCodeBlock {
-                    let code = codeBuffer.dropFirst().joined(separator: "\n")
-                    let language = fenceLanguage(codeBuffer.first ?? "")
-                    if language == "mermaid" {
-                        result.append("<div class=\"mermaid\">\(code)</div>")
-                    } else {
-                        result.append(codeBlockHTML(code: code, language: language))
-                    }
-                    codeBuffer = []
-                    inCodeBlock = false
-                } else {
-                    codeBuffer = [rawLine]
-                    inCodeBlock = true
-                }
-                i += 1
-                continue
-            }
-            
-            if inCodeBlock {
-                codeBuffer.append(escapeHtml(rawLine))
-                i += 1
-                continue
-            }
-            
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
-            
-            if line.isEmpty {
-                result.append("")
-                i += 1
-                continue
-            }
-            
-            if line == "---" || line == "***" || line == "___" {
-                result.append("<hr>")
-                i += 1
-                continue
-            }
 
-            if line.hasPrefix("$$"), line.hasSuffix("$$"), line.count > 4 {
-                let latex = String(line.dropFirst(2).dropLast(2))
-                result.append("<div class=\"math-block\">\(escapeHtml(latex))</div>")
-                i += 1
-                continue
-            }
-            
-            if i + 1 < lines.count,
-               let setext = parseSetextHeader(current: line, next: lines[i + 1].trimmingCharacters(in: .whitespaces)) {
-                result.append(setext)
-                i += 2
-                continue
-            }
-            
-            if let header = parseHeader(line) {
-                result.append(header)
-                i += 1
-                continue
-            }
-            
-            if line.hasPrefix(">") {
-                var quoteLines: [String] = []
-                while i < lines.count {
-                    let qLine = lines[i]
-                    if qLine.hasPrefix(">") {
-                        let content = String(qLine.dropFirst()).trimmingCharacters(in: .whitespaces)
-                        quoteLines.append(content)
-                        i += 1
-                    } else if qLine.trimmingCharacters(in: .whitespaces).isEmpty {
-                        i += 1
-                        continue
-                    } else {
-                        break
-                    }
-                }
-                let content = quoteLines.map { inlineRender($0) }.joined(separator: " ")
-                result.append("<blockquote><p>\(content)</p></blockquote>")
-                continue
-            }
-            
-            if itemInfo(for: rawLine) != nil {
-                let list = parseListBlock(lines: lines, startIndex: i, indent: indentWidth(of: rawLine))
-                result.append(list.html)
-                i = list.nextIndex
-                continue
-            }
-            
-            if line.contains("|"),
-               let table = parseTable(lines: lines, startIndex: i) {
-                result.append(table.html)
-                i = table.nextIndex
-                continue
-            }
-            
-            result.append("<p>\(inlineRender(line))</p>")
-            i += 1
+    private static func strippingFrontMatter(from markdown: String) -> String {
+        let lines = markdown.components(separatedBy: "\n")
+        guard let first = lines.first?.trimmingCharacters(in: .whitespaces),
+              first == "---" || first == "+++" else {
+            return markdown
         }
-        
-        if inCodeBlock {
-            let code = codeBuffer.dropFirst().joined(separator: "\n")
-            let language = fenceLanguage(codeBuffer.first ?? "")
-            if language == "mermaid" {
-                result.append("<div class=\"mermaid\">\(code)</div>")
-            } else {
-                result.append(codeBlockHTML(code: code, language: language))
-            }
+        let closing = first == "---" ? ["---", "..."] : ["+++"]
+        guard let end = lines.dropFirst().firstIndex(where: {
+            closing.contains($0.trimmingCharacters(in: .whitespaces))
+        }) else {
+            return markdown
         }
-
+        let inner = lines[1..<end]
+        let looksLikeFrontMatter = inner.contains {
+            first == "---" ? $0.contains(":") : $0.contains("=")
+        }
+        guard looksLikeFrontMatter else { return markdown }
+        var result = lines
+        for index in 0...end {
+            result[index] = ""
+        }
         return result.joined(separator: "\n")
     }
 
-    private static func codeBlockHTML(code: String, language: String) -> String {
-        guard !language.isEmpty else {
-            return "<pre><code>\(code)</code></pre>"
-        }
-        let escapedLanguage = escapeHtml(language)
-        return "<pre data-lang=\"\(escapedLanguage)\"><code class=\"language-\(escapedLanguage)\">\(code)</code></pre>"
+    private static func mathToken(index: Int, isBlock: Bool) -> String {
+        "\u{F0000}\(isBlock ? "B" : "I")\(index)\u{F0001}"
     }
 
-    private static func fenceLanguage(_ openingFence: String) -> String {
-        let info = String(openingFence.dropFirst(3)).trimmingCharacters(in: .whitespaces)
-        let name = info.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true).first
-        return name.map { $0.lowercased() } ?? ""
-    }
-
-    private struct ListItemInfo {
-        let indent: Int
-        let ordered: Bool
-        let content: String
-    }
-
-    private static let listItemRegex = try! NSRegularExpression(pattern: "^[ \\t]*([-*+]|\\d{1,9}[.)])[ \\t]+(.*)$")
-
-    private static func itemInfo(for rawLine: String) -> ListItemInfo? {
-        let range = NSRange(rawLine.startIndex..., in: rawLine)
-        guard let match = listItemRegex.firstMatch(in: rawLine, range: range),
-              match.range(at: 1).location != NSNotFound,
-              match.range(at: 2).location != NSNotFound,
-              let markerRange = Range(match.range(at: 1), in: rawLine),
-              let contentRange = Range(match.range(at: 2), in: rawLine) else {
-            return nil
-        }
-        let marker = String(rawLine[markerRange])
-        let ordered = marker.rangeOfCharacter(from: .decimalDigits) != nil
-        return ListItemInfo(
-            indent: indentWidth(of: rawLine),
-            ordered: ordered,
-            content: String(rawLine[contentRange])
-        )
-    }
-
-    private static func indentWidth(of line: String) -> Int {
-        var width = 0
-        for character in line {
-            if character == " " {
-                width += 1
-            } else if character == "\t" {
-                width += 4
-            } else {
-                break
-            }
-        }
-        return width
-    }
-
-    private static func parseListBlock(lines: [String], startIndex: Int, indent: Int) -> (html: String, nextIndex: Int) {
-        guard let first = itemInfo(for: lines[startIndex]) else {
-            return (html: "", nextIndex: startIndex)
-        }
-        let ordered = first.ordered
-        var itemContents: [String] = []
-        var i = startIndex
+    private static func extractMath(from markdown: String) -> (String, [MathItem]) {
+        var items: [MathItem] = []
+        var output: [String] = []
+        let lines = markdown.components(separatedBy: "\n")
+        var i = 0
+        var fence: (character: Character, length: Int)?
 
         while i < lines.count {
-            let rawLine = lines[i]
+            let line = lines[i]
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
 
-            if rawLine.trimmingCharacters(in: .whitespaces).isEmpty {
-                var j = i
-                while j < lines.count, lines[j].trimmingCharacters(in: .whitespaces).isEmpty {
-                    j += 1
+            if let currentFence = fence {
+                output.append(line)
+                if isClosingFence(trimmed, character: currentFence.character, length: currentFence.length) {
+                    fence = nil
                 }
-                if j < lines.count, let next = itemInfo(for: lines[j]), next.indent >= indent {
-                    i = j
-                    continue
-                }
-                break
-            }
-
-            guard let info = itemInfo(for: rawLine) else {
-                if let last = itemContents.indices.last, indentWidth(of: rawLine) > indent {
-                    itemContents[last] += " " + inlineRender(rawLine.trimmingCharacters(in: .whitespaces))
-                    i += 1
-                    continue
-                }
-                break
-            }
-
-            if info.indent < indent || (info.indent == indent && info.ordered != ordered) {
-                break
-            }
-
-            if info.indent > indent, !itemContents.isEmpty {
-                let nested = parseListBlock(lines: lines, startIndex: i, indent: info.indent)
-                itemContents[itemContents.count - 1] += nested.html
-                i = nested.nextIndex
+                i += 1
                 continue
             }
 
-            itemContents.append(renderListItem(info.content, lineIndex: i))
-            i += 1
-        }
-
-        let tag = ordered ? "ol" : "ul"
-        let html = "<\(tag)>" + itemContents.map { "<li>\($0)</li>" }.joined() + "</\(tag)>"
-        return (html: html, nextIndex: i > startIndex ? i : startIndex + 1)
-    }
-    
-    private static func parseHeader(_ line: String) -> String? {
-        guard line.hasPrefix("#") else { return nil }
-        let prefix = line.prefix(while: { $0 == "#" })
-        let level = prefix.count
-        guard level >= 1 && level <= 6 else { return nil }
-        let text = String(line.dropFirst(level)).trimmingCharacters(in: .whitespaces)
-        return "<h\(level)>\(inlineRender(text))</h\(level)>"
-    }
-    
-    private static func parseSetextHeader(current: String, next: String) -> String? {
-        guard !current.isEmpty, !next.isEmpty else { return nil }
-        if next.allSatisfy({ $0 == "=" }) {
-            return "<h1>\(inlineRender(current))</h1>"
-        } else if next.allSatisfy({ $0 == "-" }) {
-            return "<h2>\(inlineRender(current))</h2>"
-        }
-        return nil
-    }
-    
-    private static func renderListItem(_ item: String, lineIndex: Int) -> String {
-        let trimmed = item.trimmingCharacters(in: .whitespaces)
-        if trimmed.hasPrefix("[ ]") {
-            let task = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespaces)
-            return "<input type=\"checkbox\" data-line=\"\(lineIndex)\"> \(inlineRender(task))"
-        } else if trimmed.lowercased().hasPrefix("[x]") {
-            let task = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespaces)
-            return "<input type=\"checkbox\" checked data-line=\"\(lineIndex)\"> \(inlineRender(task))"
-        }
-        return inlineRender(item)
-    }
-    
-    private static func inlineRender(_ text: String) -> String {
-        var result = escapeHtml(text)
-        result = result.replacingOccurrences(of: "\\$", with: "&dollar;")
-
-        let (withoutMath, mathSpans) = extractInlineMath(result)
-        result = withoutMath
-
-        result = result.replacingOccurrences(of: "`([^`]+)`", with: "<code>$1</code>", options: .regularExpression)
-        result = result.replacingOccurrences(of: "\\*\\*([^*]+)\\*\\*", with: "<strong>$1</strong>", options: .regularExpression)
-        result = result.replacingOccurrences(of: "__([^_]+)__", with: "<strong>$1</strong>", options: .regularExpression)
-        result = result.replacingOccurrences(of: "\\*([^*]+)\\*", with: "<em>$1</em>", options: .regularExpression)
-        result = result.replacingOccurrences(of: "_([^_]+)_", with: "<em>$1</em>", options: .regularExpression)
-        result = result.replacingOccurrences(of: "~~([^~]+)~~", with: "<del>$1</del>", options: .regularExpression)
-        result = renderImages(result)
-        result = result.replacingOccurrences(of: "\\[([^\\]]+)\\]\\(([^)]+)\\)", with: "<a href=\"$2\">$1</a>", options: .regularExpression)
-        result = autolink(result)
-
-        for (index, span) in mathSpans.enumerated() {
-            result = result.replacingOccurrences(of: "\u{E000}\(index)\u{E001}", with: span)
-        }
-
-        if result.hasSuffix("  ") {
-            result = String(result.dropLast(2)) + "<br>"
-        }
-
-        return result
-    }
-
-    private static func extractInlineMath(_ text: String) -> (String, [String]) {
-        guard let regex = try? NSRegularExpression(
-            pattern: "\\$\\$([^$\\n]+?)\\$\\$|\\$(?!\\s)([^$\\n]+?)(?<!\\s)\\$"
-        ) else {
-            return (text, [])
-        }
-        let ns = text as NSString
-        let fullRange = NSRange(location: 0, length: ns.length)
-        var result = ""
-        var cursor = 0
-        var spans: [String] = []
-
-        regex.enumerateMatches(in: text, range: fullRange) { match, _, _ in
-            guard let match, match.range.location >= cursor else { return }
-            if match.range.location > cursor {
-                result += ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
+            if let opening = fenceOpening(trimmed) {
+                fence = opening
+                output.append(line)
+                i += 1
+                continue
             }
-            let contentRange = match.range(at: 1).location != NSNotFound ? match.range(at: 1) : match.range(at: 2)
-            spans.append(ns.substring(with: contentRange))
-            result += "<span class=\"math-inline\">\u{E000}\(spans.count - 1)\u{E001}</span>"
-            cursor = match.range.location + match.range.length
-        }
 
-        if cursor < ns.length {
-            result += ns.substring(from: cursor)
-        }
-        return (result, spans)
-    }
-
-    private static func renderImages(_ text: String) -> String {
-        guard let regex = try? NSRegularExpression(pattern: "!\\[([^\\]]*)\\]\\(([^)]+)\\)") else {
-            return text
-        }
-        let ns = text as NSString
-        let fullRange = NSRange(location: 0, length: ns.length)
-        var result = ""
-        var cursor = 0
-
-        regex.enumerateMatches(in: text, range: fullRange) { match, _, _ in
-            guard let match, match.range.location >= cursor else { return }
-            if match.range.location > cursor {
-                result += ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
+            if line.hasPrefix("    ") || line.hasPrefix("\t") {
+                output.append(line)
+                i += 1
+                continue
             }
-            let alt = ns.substring(with: match.range(at: 1))
-            let source = resolveImageSource(ns.substring(with: match.range(at: 2)))
-            result += "<img src=\"\(source)\" alt=\"\(alt)\">"
-            cursor = match.range.location + match.range.length
-        }
 
-        if cursor < ns.length {
-            result += ns.substring(from: cursor)
-        }
-        return result
-    }
-
-    private static func resolveImageSource(_ source: String) -> String {
-        let trimmed = source.trimmingCharacters(in: .whitespaces)
-        let lower = trimmed.lowercased()
-        if lower.hasPrefix("http://") || lower.hasPrefix("https://") || lower.hasPrefix("data:") || lower.hasPrefix("mdresource://") {
-            return trimmed
-        }
-        let relative = trimmed.hasPrefix("/") ? String(trimmed.dropFirst()) : trimmed
-        let encoded = relative.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? relative
-        return "mdresource:///\(encoded)"
-    }
-
-    private static func autolink(_ text: String) -> String {
-        guard let regex = try? NSRegularExpression(pattern: "(?<!href=\")(?<!src=\")(?<!>)https?://[^\\s<]+") else {
-            return text
-        }
-        let ns = text as NSString
-        let fullRange = NSRange(location: 0, length: ns.length)
-        var result = ""
-        var cursor = 0
-
-        regex.enumerateMatches(in: text, range: fullRange) { match, _, _ in
-            guard let match, match.range.location >= cursor else { return }
-            if match.range.location > cursor {
-                result += ns.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
-            }
-            var url = ns.substring(with: match.range)
-            while let last = url.last, ".,;:!?".contains(last) {
-                url.removeLast()
-            }
-            while url.hasSuffix(")") {
-                let opens = url.filter { $0 == "(" }.count
-                let closes = url.filter { $0 == ")" }.count
-                guard opens < closes else { break }
-                url.removeLast()
-            }
-            result += "<a href=\"\(url)\">\(url)</a>"
-            cursor = match.range.location + url.utf16.count
-        }
-
-        if cursor < ns.length {
-            result += ns.substring(from: cursor)
-        }
-        return result
-    }
-    
-    private struct TableResult {
-        let html: String
-        let nextIndex: Int
-    }
-    
-    private static func parseTable(lines: [String], startIndex: Int) -> TableResult? {
-        guard startIndex + 1 < lines.count else { return nil }
-        
-        let headerLine = lines[startIndex].trimmingCharacters(in: .whitespaces)
-        let separatorLine = lines[startIndex + 1].trimmingCharacters(in: .whitespaces)
-        
-        guard headerLine.contains("|"), separatorLine.contains("|") else { return nil }
-        
-        let separatorChars = CharacterSet(charactersIn: "|-: ")
-        guard separatorLine.rangeOfCharacter(from: separatorChars.inverted) == nil,
-              separatorLine.contains("-") else { return nil }
-        
-        let headerCells = parseTableCells(headerLine)
-        let alignments = parseTableAlignments(separatorLine)
-        guard headerCells.count == alignments.count, !headerCells.isEmpty else { return nil }
-        
-        var rows: [[String]] = []
-        var i = startIndex + 2
-        while i < lines.count {
-            let rowLine = lines[i].trimmingCharacters(in: .whitespaces)
-            if rowLine.isEmpty { break }
-            if !rowLine.contains("|") { break }
-            let cells = parseTableCells(rowLine)
-            guard cells.count == headerCells.count else { break }
-            rows.append(cells)
-            i += 1
-        }
-        
-        var html = "<table><thead><tr>"
-        for (index, cell) in headerCells.enumerated() {
-            html += "<th\(alignmentAttr(alignments[index]))>\(inlineRender(cell))</th>"
-        }
-        html += "</tr></thead>"
-        
-        if !rows.isEmpty {
-            html += "<tbody>"
-            for row in rows {
-                html += "<tr>"
-                for (index, cell) in row.enumerated() {
-                    html += "<td\(alignmentAttr(alignments[index]))>\(inlineRender(cell))</td>"
+            if trimmed.hasPrefix("$$"), !trimmed.hasPrefix("\\$") {
+                if trimmed.count > 4, trimmed.hasSuffix("$$") {
+                    let latex = String(trimmed.dropFirst(2).dropLast(2))
+                    let index = items.count
+                    items.append(MathItem(latex: latex, isBlock: true))
+                    output.append(mathToken(index: index, isBlock: true))
+                    i += 1
+                    continue
                 }
-                html += "</tr>"
+
+                var collected: [String] = []
+                let firstContent = String(trimmed.dropFirst(2))
+                if !firstContent.isEmpty {
+                    collected.append(firstContent)
+                }
+                var j = i + 1
+                var closed = false
+                while j < lines.count {
+                    let candidate = lines[j]
+                    let candidateTrimmed = candidate.trimmingCharacters(in: .whitespaces)
+                    if candidateTrimmed.hasSuffix("$$"), !candidateTrimmed.hasSuffix("\\$$") {
+                        let prefix = String(candidateTrimmed.dropLast(2))
+                        if !prefix.isEmpty {
+                            collected.append(prefix)
+                        }
+                        closed = true
+                        j += 1
+                        break
+                    }
+                    collected.append(candidate)
+                    j += 1
+                }
+                if closed {
+                    let index = items.count
+                    items.append(MathItem(latex: collected.joined(separator: "\n"), isBlock: true))
+                    output.append(mathToken(index: index, isBlock: true))
+                    if j - i > 1 {
+                        output.append(contentsOf: Array(repeating: "", count: j - i - 1))
+                    }
+                    i = j
+                    continue
+                }
             }
-            html += "</tbody>"
+
+            output.append(extractInlineMath(from: line, items: &items))
+            i += 1
         }
-        
-        html += "</table>"
-        return TableResult(html: html, nextIndex: i)
+
+        return (output.joined(separator: "\n"), items)
     }
-    
-    private static func parseTableCells(_ line: String) -> [String] {
-        var cells = line.components(separatedBy: "|")
-        if cells.first?.trimmingCharacters(in: .whitespaces).isEmpty == true {
-            cells.removeFirst()
-        }
-        if cells.last?.trimmingCharacters(in: .whitespaces).isEmpty == true {
-            cells.removeLast()
-        }
-        return cells.map { $0.trimmingCharacters(in: .whitespaces) }
-    }
-    
-    private static func parseTableAlignments(_ line: String) -> [String] {
-        parseTableCells(line).map { cell in
-            let trimmed = cell.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix(":"), trimmed.hasSuffix(":") {
-                return "center"
-            } else if trimmed.hasSuffix(":") {
-                return "right"
-            } else if trimmed.hasPrefix(":") {
-                return "left"
+
+    private static func extractInlineMath(from line: String, items: inout [MathItem]) -> String {
+        var result = ""
+        var index = line.startIndex
+
+        while index < line.endIndex {
+            let character = line[index]
+
+            if character == "\\" {
+                let next = line.index(after: index)
+                result.append(character)
+                if next < line.endIndex {
+                    result.append(line[next])
+                    index = line.index(after: next)
+                } else {
+                    index = next
+                }
+                continue
             }
-            return ""
+
+            if character == "`" {
+                let runEnd = line[index...].prefix(while: { $0 == "`" }).endIndex
+                let runLength = line.distance(from: index, to: runEnd)
+                var search = runEnd
+                var closed = false
+                while search < line.endIndex {
+                    if line[search] == "`" {
+                        let closeEnd = line[search...].prefix(while: { $0 == "`" }).endIndex
+                        let closeLength = line.distance(from: search, to: closeEnd)
+                        if closeLength == runLength {
+                            result += String(line[index..<closeEnd])
+                            index = closeEnd
+                            closed = true
+                            break
+                        }
+                        search = closeEnd
+                    } else {
+                        search = line.index(after: search)
+                    }
+                }
+                if !closed {
+                    result += String(line[index...])
+                    index = line.endIndex
+                }
+                continue
+            }
+
+            if character == "$" {
+                let delimiter = line[index...].prefix(while: { $0 == "$" }).count
+                let delimiterLength = min(delimiter, 2)
+                let contentStart = line.index(index, offsetBy: delimiterLength)
+                if contentStart < line.endIndex,
+                   !line[contentStart].isWhitespace {
+                    var closing: String.Index?
+                    var cursor = contentStart
+                    while cursor < line.endIndex {
+                        if line[cursor] == "\\" {
+                            cursor = line.index(after: cursor)
+                            if cursor < line.endIndex {
+                                cursor = line.index(after: cursor)
+                            }
+                            continue
+                        }
+                        if line[cursor] == "$" {
+                            let run = line[cursor...].prefix(while: { $0 == "$" }).count
+                            if run >= delimiterLength,
+                               cursor > contentStart,
+                               !line[line.index(before: cursor)].isWhitespace {
+                                closing = cursor
+                                break
+                            }
+                        }
+                        cursor = line.index(after: cursor)
+                    }
+                    if let closing {
+                        let latex = String(line[contentStart..<closing])
+                        let itemIndex = items.count
+                        items.append(MathItem(latex: latex, isBlock: false))
+                        result += mathToken(index: itemIndex, isBlock: false)
+                        index = line.index(closing, offsetBy: delimiterLength)
+                        continue
+                    }
+                }
+            }
+
+            result.append(character)
+            index = line.index(after: index)
         }
+
+        return result
     }
-    
-    private static func alignmentAttr(_ alignment: String) -> String {
-        alignment.isEmpty ? "" : " style=\"text-align: \(alignment);\""
+
+    private static func fenceOpening(_ trimmed: String) -> (character: Character, length: Int)? {
+        guard let first = trimmed.first, first == "`" || first == "~" else { return nil }
+        let run = trimmed.prefix(while: { $0 == first })
+        guard run.count >= 3 else { return nil }
+        return (first, run.count)
     }
-    
-    private static func escapeHtml(_ text: String) -> String {
-        text.replacingOccurrences(of: "&", with: "&amp;")
-            .replacingOccurrences(of: "<", with: "&lt;")
-            .replacingOccurrences(of: ">", with: "&gt;")
-            .replacingOccurrences(of: "\"", with: "&quot;")
-            .replacingOccurrences(of: "'", with: "&#39;")
+
+    private static func isClosingFence(_ trimmed: String, character: Character, length: Int) -> Bool {
+        guard let first = trimmed.first, first == character else { return false }
+        let run = trimmed.prefix(while: { $0 == character })
+        guard run.count >= length else { return false }
+        return trimmed.dropFirst(run.count).trimmingCharacters(in: .whitespaces).isEmpty
     }
-    
+
+    private static func replacingMathTokens(in html: String, items: [MathItem]) -> String {
+        var result = html
+        for (index, item) in items.enumerated() {
+            let token = mathToken(index: index, isBlock: item.isBlock)
+            let escaped = escapeHTMLEntities(item.latex)
+            if item.isBlock {
+                result = result.replacingOccurrences(
+                    of: "<p>\(token)</p>",
+                    with: "<div class=\"math-block\">\(escaped)</div>"
+                )
+            }
+            result = result.replacingOccurrences(
+                of: token,
+                with: "<span class=\"math-inline\">\(escaped)</span>"
+            )
+        }
+        return result
+    }
+
     private static func css() -> String {
         guard let url = Bundle.main.url(forResource: "markdown", withExtension: "css"),
               let css = try? String(contentsOf: url, encoding: .utf8) else {
@@ -654,6 +491,11 @@ enum MarkdownConverter {
                 if (!code) return;
 
                 var language = pre.getAttribute('data-lang') || '';
+                if (!language) {
+                    var match = (code.className || '').match(/(?:^|\\s)language-([^\\s]+)/);
+                    if (match) { language = match[1]; }
+                }
+
                 function idleText() {
                     return language ? language.toUpperCase() : 'Copy';
                 }
@@ -701,5 +543,161 @@ enum MarkdownConverter {
 
         window.__contentDone = true;
         """
+    }
+}
+
+private struct HTMLRenderer {
+    private var headingIDs: [String: Int] = [:]
+    private var tableAlignments: [Table.ColumnAlignment?] = []
+    private var tableColumn = 0
+    private var inTableHead = false
+
+    mutating func render(_ markup: Markup) -> String {
+        render(markup, inLink: false)
+    }
+
+    private mutating func render(_ markup: Markup, inLink: Bool) -> String {
+        switch markup {
+        case let document as Document:
+            return renderChildren(document, inLink: inLink)
+        case let paragraph as Paragraph:
+            return "<p>\(renderChildren(paragraph, inLink: inLink))</p>\n"
+        case let heading as Heading:
+            let id = headingID(for: heading)
+            return "<h\(heading.level) id=\"\(id)\">\(renderChildren(heading, inLink: inLink))</h\(heading.level)>\n"
+        case let blockQuote as BlockQuote:
+            return "<blockquote>\n\(renderChildren(blockQuote, inLink: inLink))</blockquote>\n"
+        case let codeBlock as CodeBlock:
+            let language = (codeBlock.language ?? "").trimmingCharacters(in: .whitespaces)
+            if language.lowercased() == "mermaid" {
+                return "<div class=\"mermaid\">\(escapeHTMLEntities(codeBlock.code))</div>\n"
+            }
+            var attributes = ""
+            if !language.isEmpty {
+                let escapedLanguage = escapeHTMLEntities(language)
+                attributes += " data-lang=\"\(escapedLanguage)\""
+            }
+            let codeAttributes = language.isEmpty ? "" : " class=\"language-\(escapeHTMLEntities(language))\""
+            return "<pre\(attributes)><code\(codeAttributes)>\(escapeHTMLEntities(codeBlock.code))</code></pre>\n"
+        case let htmlBlock as HTMLBlock:
+            return "<p>\(escapeHTMLEntities(htmlBlock.rawHTML))</p>\n"
+        case is ThematicBreak:
+            return "<hr>\n"
+        case let list as UnorderedList:
+            return "<ul>\n\(renderChildren(list, inLink: inLink))</ul>\n"
+        case let list as OrderedList:
+            let start = list.startIndex == 1 ? "" : " start=\"\(list.startIndex)\""
+            return "<ol\(start)>\n\(renderChildren(list, inLink: inLink))</ol>\n"
+        case let item as ListItem:
+            var prefix = ""
+            if let checkbox = item.checkbox {
+                var attributes = ""
+                if let line = item.range?.lowerBound.line {
+                    attributes += " data-line=\"\(line - 1)\""
+                }
+                if checkbox == .checked {
+                    attributes += " checked"
+                }
+                prefix = "<input type=\"checkbox\"\(attributes)> "
+            }
+
+            let children = Array(item.children)
+            var content = ""
+            for (index, child) in children.enumerated() {
+                if !prefix.isEmpty, index == 0, let paragraph = child as? Paragraph {
+                    content += renderChildren(paragraph, inLink: inLink)
+                } else {
+                    content += render(child, inLink: inLink)
+                }
+            }
+            return "<li>\(prefix)\(content)</li>\n"
+        case let table as Table:
+            let previous = tableAlignments
+            tableAlignments = table.columnAlignments
+            let content = renderChildren(table, inLink: inLink)
+            tableAlignments = previous
+            return "<table>\n\(content)</table>\n"
+        case let head as Table.Head:
+            let previous = inTableHead
+            inTableHead = true
+            let content = renderChildren(head, inLink: inLink)
+            inTableHead = previous
+            return "<thead>\n<tr>\n\(content)</tr>\n</thead>\n"
+        case let body as Table.Body:
+            guard !body.isEmpty else { return "" }
+            return "<tbody>\n\(renderChildren(body, inLink: inLink))</tbody>\n"
+        case let row as Table.Row:
+            tableColumn = 0
+            return "<tr>\n\(renderChildren(row, inLink: inLink))</tr>\n"
+        case let cell as Table.Cell:
+            let tag = inTableHead ? "th" : "td"
+            var attributes = ""
+            if tableAlignments.indices.contains(tableColumn),
+               let alignment = tableAlignments[tableColumn] {
+                attributes += " style=\"text-align: \(alignment);\""
+            }
+            if cell.colspan > 1 {
+                attributes += " colspan=\"\(cell.colspan)\""
+            }
+            if cell.rowspan > 1 {
+                attributes += " rowspan=\"\(cell.rowspan)\""
+            }
+            tableColumn += 1
+            return "<\(tag)\(attributes)>\(renderChildren(cell, inLink: inLink))</\(tag)>\n"
+        case let text as Text:
+            return inLink ? escapeHTMLEntities(text.string) : linkifyText(text.string)
+        case let inlineCode as InlineCode:
+            return "<code>\(escapeHTMLEntities(inlineCode.code))</code>"
+        case let emphasis as Emphasis:
+            return "<em>\(renderChildren(emphasis, inLink: inLink))</em>"
+        case let strong as Strong:
+            return "<strong>\(renderChildren(strong, inLink: inLink))</strong>"
+        case let strikethrough as Strikethrough:
+            return "<del>\(renderChildren(strikethrough, inLink: inLink))</del>"
+        case let link as Link:
+            var attributes = ""
+            if let destination = link.destination, !destination.isEmpty {
+                attributes += " href=\"\(escapeHTMLEntities(destination))\""
+            }
+            if let title = link.title, !title.isEmpty {
+                attributes += " title=\"\(escapeHTMLEntities(title))\""
+            }
+            return "<a\(attributes)>\(renderChildren(link, inLink: true))</a>"
+        case let image as Image:
+            let source = resolveImageSource(image.source ?? "")
+            var attributes = " src=\"\(escapeHTMLEntities(source))\" alt=\"\(escapeHTMLEntities(plainText(from: image)))\""
+            if let title = image.title, !title.isEmpty {
+                attributes += " title=\"\(escapeHTMLEntities(title))\""
+            }
+            return "<img\(attributes)>"
+        case is SoftBreak:
+            return "\n"
+        case is LineBreak:
+            return "<br>\n"
+        case let inlineHTML as InlineHTML:
+            return escapeHTMLEntities(inlineHTML.rawHTML)
+        case let symbolLink as SymbolLink:
+            return "<code>\(escapeHTMLEntities(symbolLink.destination ?? ""))</code>"
+        default:
+            return renderChildren(markup, inLink: inLink)
+        }
+    }
+
+    private mutating func renderChildren(_ markup: Markup, inLink: Bool) -> String {
+        markup.children.map { render($0, inLink: inLink) }.joined()
+    }
+
+    private mutating func headingID(for heading: Heading) -> String {
+        var slug = plainText(from: heading).lowercased()
+        slug = slug.replacingOccurrences(of: "[^a-z0-9]+", with: "-", options: .regularExpression)
+        slug = slug.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        if slug.isEmpty { slug = "section" }
+
+        if let count = headingIDs[slug] {
+            headingIDs[slug] = count + 1
+            return "\(slug)-\(count)"
+        }
+        headingIDs[slug] = 1
+        return slug
     }
 }

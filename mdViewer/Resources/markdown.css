@@ -108,6 +108,9 @@ ul, ol {
 }
 
 li + li { margin-top: 0.25em; }
+li > p { margin-top: 0; margin-bottom: 0; }
+li > p + p { margin-top: 8px; }
+li > ul, li > ol { margin-top: 4px; margin-bottom: 0; }
 
 hr {
     height: 0.25em;
@@ -197,6 +200,16 @@ del { text-decoration: line-through; }
 input[type="checkbox"] {
     margin-right: 0.5em;
     vertical-align: middle;
+    accent-color: #0969da;
+}
+
+@media (prefers-color-scheme: dark) {
+    input[type="checkbox"] { accent-color: #58a6ff; }
+}
+
+.math-block {
+    overflow-x: auto;
+    overflow-y: hidden;
 }
 
 .copy-code-button {
