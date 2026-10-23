@@ -4,6 +4,9 @@ import AppKit
 struct MarkdownEditor: NSViewRepresentable {
     @Binding var text: String
     var fontSize: CGFloat = 13
+    var scrollToFraction: CGFloat?
+    var scrollToGeneration: Int = 0
+    var onScrollFraction: ((CGFloat) -> Void)?
 
     func makeNSView(context: Context) -> NSScrollView {
         let textView = LineNumberTextView()
@@ -55,7 +58,9 @@ struct MarkdownEditor: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
+        context.coordinator.parent = self
         guard let textView = nsView.documentView as? NSTextView else { return }
+        context.coordinator.applyScrollIfNeeded(in: nsView)
         var needsRefresh = false
         let font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         if textView.font != font {
@@ -63,8 +68,11 @@ struct MarkdownEditor: NSViewRepresentable {
             needsRefresh = true
         }
         if textView.string != text {
+            let scrollOrigin = nsView.contentView.bounds.origin
             textView.string = text
             needsRefresh = true
+            nsView.contentView.scroll(to: scrollOrigin)
+            nsView.reflectScrolledClipView(nsView.contentView)
         }
         if needsRefresh {
             (nsView.verticalRulerView as? LineNumberRulerView)?.invalidateLineCount()
@@ -84,9 +92,31 @@ struct MarkdownEditor: NSViewRepresentable {
         var parent: MarkdownEditor
         weak var textView: LineNumberTextView?
         weak var ruler: LineNumberRulerView?
+        private var lastScrollGeneration = -1
+        private var suppressScrollCallback = false
 
         init(_ parent: MarkdownEditor) {
             self.parent = parent
+        }
+
+        func applyScrollIfNeeded(in scrollView: NSScrollView) {
+            guard let fraction = parent.scrollToFraction,
+                  parent.scrollToGeneration != lastScrollGeneration else {
+                return
+            }
+            lastScrollGeneration = parent.scrollToGeneration
+
+            let clipView = scrollView.contentView
+            let contentHeight = scrollView.documentView?.bounds.height ?? 0
+            let maxY = max(0, contentHeight - clipView.bounds.height)
+            let y = min(max(fraction, 0), 1) * maxY
+
+            suppressScrollCallback = true
+            clipView.scroll(to: NSPoint(x: clipView.bounds.origin.x, y: y))
+            scrollView.reflectScrolledClipView(clipView)
+            DispatchQueue.main.async { [weak self] in
+                self?.suppressScrollCallback = false
+            }
         }
 
         func textDidChange(_ notification: Notification) {
@@ -101,6 +131,14 @@ struct MarkdownEditor: NSViewRepresentable {
 
         @objc func boundsChanged() {
             ruler?.needsDisplay = true
+            guard !suppressScrollCallback,
+                  let scrollView = textView?.enclosingScrollView else { return }
+            let contentHeight = scrollView.documentView?.bounds.height ?? 0
+            let maxY = max(0, contentHeight - scrollView.contentView.bounds.height)
+            let fraction = maxY > 0
+                ? min(max(scrollView.contentView.bounds.origin.y / maxY, 0), 1)
+                : 0
+            parent.onScrollFraction?(fraction)
         }
 
         @objc func showFindPanel() {

@@ -11,8 +11,11 @@ struct MarkdownPreview: NSViewRepresentable {
     var findForward: Bool = true
     var scrollToHeadingID: String?
     var scrollToHeadingGeneration: Int = 0
+    var scrollFraction: CGFloat?
+    var scrollFractionGeneration: Int = 0
     var onToggleTask: ((Int, Bool) -> Void)?
     var onFindResult: ((Bool) -> Void)?
+    var onPreviewScroll: ((CGFloat) -> Void)?
 
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -22,6 +25,7 @@ struct MarkdownPreview: NSViewRepresentable {
         config.userContentController.add(context.coordinator, name: "copyCode")
         config.userContentController.add(context.coordinator, name: "toggleTask")
         config.userContentController.add(context.coordinator, name: "contentDone")
+        config.userContentController.add(context.coordinator, name: "scrollSync")
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.isInspectable = false
         webView.underPageBackgroundColor = .clear
@@ -40,6 +44,7 @@ struct MarkdownPreview: NSViewRepresentable {
         guard context.coordinator.lastMarkdownText != text else {
             context.coordinator.applyFind(to: nsView)
             context.coordinator.applyScroll(to: nsView)
+            context.coordinator.applyScrollFraction(to: nsView)
             return
         }
         if context.coordinator.skipNextLoad {
@@ -47,6 +52,7 @@ struct MarkdownPreview: NSViewRepresentable {
             context.coordinator.lastMarkdownText = text
             context.coordinator.applyFind(to: nsView)
             context.coordinator.applyScroll(to: nsView)
+            context.coordinator.applyScrollFraction(to: nsView)
             return
         }
         context.coordinator.lastMarkdownText = text
@@ -78,6 +84,7 @@ struct MarkdownPreview: NSViewRepresentable {
         private var lastFindGeneration = -1
         private var lastFindForward = true
         private var lastScrollGeneration = -1
+        private var lastScrollFractionGeneration = -1
 
         init(parent: MarkdownPreview) {
             self.parent = parent
@@ -101,6 +108,9 @@ struct MarkdownPreview: NSViewRepresentable {
                 let y = savedScrollY
                 guard y > 0, let webView = webView else { return }
                 webView.evaluateJavaScript("window.scrollTo(0, \(y))")
+            case "scrollSync":
+                guard let fraction = message.body as? Double else { return }
+                parent.onPreviewScroll?(CGFloat(fraction))
             default:
                 break
             }
@@ -109,21 +119,42 @@ struct MarkdownPreview: NSViewRepresentable {
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             applyFind(to: webView)
             let pendingScroll = hasPendingScroll
+            let pendingFraction = hasPendingScrollFraction
             guard loadVersion != restoredVersion else {
-                if pendingScroll { applyScroll(to: webView) }
+                if pendingScroll {
+                    applyScroll(to: webView)
+                } else if pendingFraction {
+                    applyScrollFraction(to: webView)
+                }
                 return
             }
             restoredVersion = loadVersion
             let y = savedScrollY
-            guard pendingScroll || y > 0 else { return }
+            guard pendingScroll || pendingFraction || y > 0 else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self, weak webView] in
                 guard let self, let webView else { return }
                 if self.hasPendingScroll {
                     self.applyScroll(to: webView)
+                } else if self.hasPendingScrollFraction {
+                    self.applyScrollFraction(to: webView)
                 } else {
                     webView.evaluateJavaScript("window.scrollTo(0, \(y))")
                 }
             }
+        }
+
+        private var hasPendingScrollFraction: Bool {
+            guard parent.scrollFraction != nil else { return false }
+            return parent.scrollFractionGeneration != lastScrollFractionGeneration
+        }
+
+        func applyScrollFraction(to webView: WKWebView) {
+            guard hasPendingScrollFraction, let fraction = parent.scrollFraction else { return }
+            lastScrollFractionGeneration = parent.scrollFractionGeneration
+            let clamped = min(max(fraction, 0), 1)
+            webView.evaluateJavaScript(
+                "var d = document.documentElement; var max = Math.max(0, d.scrollHeight - window.innerHeight); window.scrollTo(0, \(clamped) * max);"
+            )
         }
 
         private var hasPendingScroll: Bool {

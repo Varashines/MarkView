@@ -5,6 +5,45 @@ import AppKit
 enum ViewMode {
     case edit
     case preview
+    case split
+}
+
+@MainActor
+final class SplitScrollSync: ObservableObject {
+    enum Source {
+        case editor
+        case preview
+    }
+
+    @Published private(set) var editorTarget: CGFloat?
+    @Published private(set) var editorGeneration = 0
+    @Published private(set) var previewTarget: CGFloat?
+    @Published private(set) var previewGeneration = 0
+
+    private var activeSource: Source?
+    private var lastEventTime: TimeInterval = 0
+
+    func editorDidScroll(_ fraction: CGFloat) {
+        guard shouldAccept(.editor) else { return }
+        previewTarget = fraction
+        previewGeneration += 1
+    }
+
+    func previewDidScroll(_ fraction: CGFloat) {
+        guard shouldAccept(.preview) else { return }
+        editorTarget = fraction
+        editorGeneration += 1
+    }
+
+    private func shouldAccept(_ source: Source) -> Bool {
+        let now = Date.timeIntervalSinceReferenceDate
+        if let activeSource, activeSource != source, now - lastEventTime < 0.15 {
+            return false
+        }
+        activeSource = source
+        lastEventTime = now
+        return true
+    }
 }
 
 struct ContentView: View {
@@ -22,6 +61,9 @@ struct ContentView: View {
     @State private var outline: [MarkdownHeading] = []
     @State private var scrollHeadingID: String?
     @State private var scrollHeadingGeneration = 0
+    @State private var previewText = ""
+    @State private var previewUpdateTask: Task<Void, Never>?
+    @StateObject private var scrollSync = SplitScrollSync()
     @FocusState private var findFieldFocused: Bool
 
     private var contentBackgroundColor: Color {
@@ -67,6 +109,14 @@ struct ContentView: View {
                         )
                     }
                     ToolbarItemGroup(placement: .primaryAction) {
+                        Button(action: { toggleSplit() }) {
+                            Label("Split", systemImage: "rectangle.split.2x1")
+                                .font(.system(size: 12))
+                                .frame(width: 52)
+                                .contentShape(Rectangle())
+                                .foregroundStyle(mode == .split ? Color.accentColor : Color.primary)
+                        }
+                        .help("Toggle Split View (⌘⌥E)")
                         Button(action: { toggleMode() }) {
                             Label("Preview", systemImage: "eye")
                                 .font(.system(size: 12))
@@ -94,7 +144,11 @@ struct ContentView: View {
             handleDrop(urls)
         }
         .onAppear {
+            previewText = store.text
             handleLaunch()
+        }
+        .onChange(of: store.text) { _, newText in
+            schedulePreviewUpdate(newText)
         }
         .task(id: store.text) {
             let text = store.text
@@ -122,9 +176,12 @@ struct ContentView: View {
             columnVisibility: $columnVisibility,
             previewZoom: $previewZoom,
             exportPDF: { exportPDF(singlePage: $0) },
-            beginPreviewFind: beginFind
+            beginPreviewFind: beginFind,
+            toggleSplit: toggleSplit
         ))
         .onChange(of: mode) { _, newMode in
+            previewUpdateTask?.cancel()
+            previewText = store.text
             if newMode == .edit {
                 closeFind()
             }
@@ -141,6 +198,8 @@ struct ContentView: View {
                     onOpenFile: { store.openFile() },
                     onOpenFolder: { store.openFolder() }
                 )
+            } else if mode == .split {
+                splitArea
             } else {
                 previewArea
             }
@@ -156,17 +215,35 @@ struct ContentView: View {
     private var editorArea: some View {
         HStack(spacing: 0) {
             Spacer()
-            MarkdownEditor(text: textBinding)
-                .frame(maxWidth: 800, maxHeight: .infinity)
+            MarkdownEditor(
+                text: textBinding,
+                scrollToFraction: scrollSync.editorTarget,
+                scrollToGeneration: scrollSync.editorGeneration,
+                onScrollFraction: { fraction in
+                    if mode == .split {
+                        scrollSync.editorDidScroll(fraction)
+                    }
+                }
+            )
+            .frame(maxWidth: 800, maxHeight: .infinity)
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(contentBackgroundColor)
     }
 
+    private var splitArea: some View {
+        HStack(spacing: 0) {
+            editorArea
+            Divider()
+            previewArea
+        }
+        .background(contentBackgroundColor)
+    }
+
     private var previewArea: some View {
         MarkdownPreview(
-            text: store.text,
+            text: previewText,
             documentURL: store.fileURL,
             zoom: previewZoom,
             findQuery: findQuery,
@@ -174,6 +251,8 @@ struct ContentView: View {
             findForward: findForward,
             scrollToHeadingID: scrollHeadingID,
             scrollToHeadingGeneration: scrollHeadingGeneration,
+            scrollFraction: scrollSync.previewTarget,
+            scrollFractionGeneration: scrollSync.previewGeneration,
             onToggleTask: { line, checked in
                 var lines = store.text.components(separatedBy: .newlines)
                 guard line >= 0, line < lines.count else { return }
@@ -183,6 +262,11 @@ struct ContentView: View {
             },
             onFindResult: { found in
                 findMatchFound = found
+            },
+            onPreviewScroll: { fraction in
+                if mode == .split {
+                    scrollSync.previewDidScroll(fraction)
+                }
             }
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -327,6 +411,23 @@ struct ContentView: View {
         }
     }
 
+    private func toggleSplit() {
+        mode = mode == .split ? .preview : .split
+    }
+
+    private func schedulePreviewUpdate(_ text: String) {
+        previewUpdateTask?.cancel()
+        guard mode == .split else {
+            previewText = text
+            return
+        }
+        previewUpdateTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            previewText = text
+        }
+    }
+
     private func restoreLastSession() {
         if let folder = RecentItems.lastFolder(),
            FileManager.default.fileExists(atPath: folder.path) {
@@ -378,6 +479,7 @@ private struct AppCommandHandlers: ViewModifier {
     @Binding var previewZoom: Double
     let exportPDF: (_ singlePage: Bool) -> Void
     let beginPreviewFind: () -> Void
+    let toggleSplit: () -> Void
 
     func body(content: Content) -> some View {
         content
@@ -416,6 +518,9 @@ private struct AppCommandHandlers: ViewModifier {
             }
             .onReceive(NotificationCenter.default.publisher(for: .toggleModeRequested)) { _ in
                 toggleMode()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .toggleSplitRequested)) { _ in
+                toggleSplit()
             }
             .onReceive(NotificationCenter.default.publisher(for: .findRequested)) { _ in
                 if mode == .preview {

@@ -600,6 +600,21 @@ enum MarkdownConverter {
             }
         });
 
+        var scrollSyncScheduled = false;
+        window.addEventListener('scroll', function() {
+            if (scrollSyncScheduled) { return; }
+            scrollSyncScheduled = true;
+            setTimeout(function() {
+                scrollSyncScheduled = false;
+                var d = document.documentElement;
+                var max = d.scrollHeight - window.innerHeight;
+                var fraction = max > 0 ? Math.min(Math.max(window.scrollY / max, 0), 1) : 0;
+                if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.scrollSync) {
+                    window.webkit.messageHandlers.scrollSync.postMessage(fraction);
+                }
+            }, 50);
+        }, { passive: true });
+
         window.__contentDone = true;
         """
     }

@@ -75,6 +75,8 @@ struct mdViewerApp: App {
                     .keyboardShortcut("\\", modifiers: .command)
                 Button("Toggle Edit/Preview") { post(.toggleModeRequested) }
                     .keyboardShortcut("e")
+                Button("Toggle Split View") { post(.toggleSplitRequested) }
+                    .keyboardShortcut("e", modifiers: [.command, .option])
                 Divider()
                 Button("Zoom In") { post(.zoomInRequested) }
                     .keyboardShortcut("+")
@@ -118,6 +120,7 @@ extension Notification.Name {
     static let exportSinglePagePDFRequested = Notification.Name("exportSinglePagePDFRequested")
     static let toggleSidebarRequested = Notification.Name("toggleSidebarRequested")
     static let toggleModeRequested = Notification.Name("toggleModeRequested")
+    static let toggleSplitRequested = Notification.Name("toggleSplitRequested")
     static let findRequested = Notification.Name("findRequested")
     static let zoomInRequested = Notification.Name("zoomInRequested")
     static let zoomOutRequested = Notification.Name("zoomOutRequested")
