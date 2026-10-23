@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import Darwin
 import UniformTypeIdentifiers
 
 enum DocumentStats {
@@ -201,6 +202,9 @@ final class DocumentStore: ObservableObject {
 
     private var autosaveTask: Task<Void, Never>?
     private let autosaveDelay: Duration = .seconds(1)
+    private var externalChangeTask: Task<Void, Never>?
+    private var directoryWatchSource: DispatchSourceFileSystemObject?
+    private var hasExternalConflict = false
 
     func openFile() {
         let panel = NSOpenPanel()
@@ -250,8 +254,10 @@ final class DocumentStore: ObservableObject {
             text = try String(contentsOf: url, encoding: .utf8)
             fileURL = url
             isDirty = false
+            hasExternalConflict = false
             status = "Opened"
             RecentItems.addFile(url)
+            startWatchingFile(at: url)
             onFileOpened?()
         } catch {
             status = "Failed to open: \(error.localizedDescription)"
@@ -278,14 +284,18 @@ final class DocumentStore: ObservableObject {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         write(to: url)
         fileURL = url
+        hasExternalConflict = false
         RecentItems.addFile(url)
+        startWatchingFile(at: url)
     }
     
     private func write(to url: URL) {
+        let hadConflict = hasExternalConflict
         do {
             try text.write(to: url, atomically: true, encoding: .utf8)
             isDirty = false
-            status = "Saved"
+            hasExternalConflict = false
+            status = hadConflict ? "Saved, overwriting external changes" : "Saved"
         } catch {
             status = "Failed to save: \(error.localizedDescription)"
         }
@@ -294,7 +304,7 @@ final class DocumentStore: ObservableObject {
     func textChanged(_ newText: String) {
         text = newText
         isDirty = true
-        status = "Unsaved changes"
+        status = hasExternalConflict ? "Unsaved changes (external change detected)" : "Unsaved changes"
         
         autosaveTask?.cancel()
         autosaveTask = Task { [weak self] in
@@ -307,8 +317,89 @@ final class DocumentStore: ObservableObject {
     
     private func autosave() {
         guard let url = fileURL else { return }
+        guard !hasExternalConflict else {
+            status = "Autosave paused: external change detected"
+            return
+        }
         write(to: url)
         status = "Autosaved"
+    }
+
+    func reloadFromDisk() {
+        guard let url = fileURL else { return }
+        do {
+            text = try String(contentsOf: url, encoding: .utf8)
+            isDirty = false
+            hasExternalConflict = false
+            status = "Reloaded from disk"
+        } catch {
+            status = "Failed to reload: \(error.localizedDescription)"
+        }
+    }
+
+    private func startWatchingFile(at url: URL) {
+        stopWatchingFile()
+        let directory = url.deletingLastPathComponent()
+        let fileDescriptor = open(directory.path, O_EVTONLY)
+        guard fileDescriptor >= 0 else { return }
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fileDescriptor,
+            eventMask: [.write, .rename, .delete, .extend, .attrib],
+            queue: .main
+        )
+        source.setEventHandler { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.scheduleExternalChangeCheck()
+            }
+        }
+        source.setCancelHandler {
+            close(fileDescriptor)
+        }
+        directoryWatchSource = source
+        source.resume()
+    }
+
+    private func stopWatchingFile() {
+        externalChangeTask?.cancel()
+        externalChangeTask = nil
+        directoryWatchSource?.cancel()
+        directoryWatchSource = nil
+    }
+
+    private func scheduleExternalChangeCheck() {
+        externalChangeTask?.cancel()
+        externalChangeTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(200))
+            guard !Task.isCancelled else { return }
+            self?.checkForExternalChange()
+        }
+    }
+
+    private func checkForExternalChange() {
+        guard let url = fileURL else { return }
+        guard let contents = try? String(contentsOf: url, encoding: .utf8) else {
+            status = "File removed or unreadable"
+            return
+        }
+        guard contents != text else {
+            if hasExternalConflict {
+                hasExternalConflict = false
+                status = "External changes match local content"
+            }
+            return
+        }
+        if isDirty || hasExternalConflict {
+            hasExternalConflict = true
+            status = "External change detected"
+        } else {
+            text = contents
+            status = "Reloaded external changes"
+        }
+    }
+
+    deinit {
+        directoryWatchSource?.cancel()
     }
     
     private var allowedOpenTypes: [UTType] {

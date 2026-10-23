@@ -251,6 +251,9 @@ private struct AppCommandHandlers: ViewModifier {
             .onReceive(NotificationCenter.default.publisher(for: .saveRequested)) { _ in
                 store.save()
             }
+            .onReceive(NotificationCenter.default.publisher(for: .reloadFromDiskRequested)) { _ in
+                store.reloadFromDisk()
+            }
         .onReceive(NotificationCenter.default.publisher(for: .exportPDFRequested)) { _ in
             exportPDF(false)
         }
