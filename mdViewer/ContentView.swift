@@ -14,6 +14,12 @@ struct ContentView: View {
     @State private var mode: ViewMode = .preview
     @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
     @State private var crossfade: Double = 0
+    @State private var findVisible = false
+    @State private var findQuery = ""
+    @State private var findGeneration = 0
+    @State private var findForward = true
+    @State private var findMatchFound: Bool?
+    @FocusState private var findFieldFocused: Bool
 
     private var contentBackgroundColor: Color {
         colorScheme == .dark
@@ -92,8 +98,14 @@ struct ContentView: View {
             toggleMode: toggleMode,
             columnVisibility: $columnVisibility,
             previewZoom: $previewZoom,
-            exportPDF: { exportPDF(singlePage: $0) }
+            exportPDF: { exportPDF(singlePage: $0) },
+            beginPreviewFind: beginFind
         ))
+        .onChange(of: mode) { _, newMode in
+            if newMode == .edit {
+                closeFind()
+            }
+        }
     }
 
     @ViewBuilder
@@ -134,15 +146,117 @@ struct ContentView: View {
             text: store.text,
             documentURL: store.fileURL,
             zoom: previewZoom,
+            findQuery: findQuery,
+            findGeneration: findGeneration,
+            findForward: findForward,
             onToggleTask: { line, checked in
                 var lines = store.text.components(separatedBy: .newlines)
                 guard line >= 0, line < lines.count else { return }
                 guard let updated = toggledTaskLine(lines[line], checked: checked) else { return }
                 lines[line] = updated
                 store.textChanged(lines.joined(separator: "\n"))
+            },
+            onFindResult: { found in
+                findMatchFound = found
             }
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .topTrailing) {
+            if findVisible {
+                previewFindBar
+                    .padding(.top, 10)
+                    .padding(.trailing, 14)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+    }
+
+    private var previewFindBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextField("Find in preview", text: $findQuery)
+                .textFieldStyle(.plain)
+                .font(.callout)
+                .frame(width: 180)
+                .focused($findFieldFocused)
+                .onSubmit {
+                    findNext(forward: !NSEvent.modifierFlags.contains(.shift))
+                }
+                .onChange(of: findQuery) { _, newValue in
+                    findMatchFound = nil
+                    if !newValue.isEmpty {
+                        findForward = true
+                        findGeneration += 1
+                    }
+                }
+            Text(findStatusText)
+                .font(.caption2)
+                .foregroundStyle(findMatchFound == false ? Color.red : Color.secondary)
+                .frame(minWidth: 58, alignment: .leading)
+            Button {
+                findNext(forward: false)
+            } label: {
+                Image(systemName: "chevron.up")
+            }
+            .buttonStyle(.borderless)
+            .help("Previous match")
+            Button {
+                findNext(forward: true)
+            } label: {
+                Image(systemName: "chevron.down")
+            }
+            .buttonStyle(.borderless)
+            .help("Next match")
+            Button {
+                closeFind()
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.borderless)
+            .help("Close find bar")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(
+            Capsule()
+                .strokeBorder(Color.primary.opacity(0.08))
+        )
+        .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
+        .onExitCommand {
+            closeFind()
+        }
+    }
+
+    private var findStatusText: String {
+        guard !findQuery.isEmpty else { return "" }
+        if findMatchFound == false { return "No matches" }
+        if findMatchFound == true { return "Match" }
+        return ""
+    }
+
+    private func beginFind() {
+        findVisible = true
+        findGeneration += 1
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            findFieldFocused = true
+        }
+    }
+
+    private func findNext(forward: Bool) {
+        guard !findQuery.isEmpty else { return }
+        findForward = forward
+        findGeneration += 1
+    }
+
+    private func closeFind() {
+        guard findVisible || !findQuery.isEmpty else { return }
+        findVisible = false
+        findQuery = ""
+        findMatchFound = nil
+        findGeneration += 1
     }
 
     private func handleDrop(_ urls: [URL]) -> Bool {
@@ -229,6 +343,7 @@ private struct AppCommandHandlers: ViewModifier {
     @Binding var columnVisibility: NavigationSplitViewVisibility
     @Binding var previewZoom: Double
     let exportPDF: (_ singlePage: Bool) -> Void
+    let beginPreviewFind: () -> Void
 
     func body(content: Content) -> some View {
         content
@@ -270,10 +385,11 @@ private struct AppCommandHandlers: ViewModifier {
             }
             .onReceive(NotificationCenter.default.publisher(for: .findRequested)) { _ in
                 if mode == .preview {
-                    withAnimation(.easeInOut(duration: 0.15)) { mode = .edit }
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    NotificationCenter.default.post(name: .performEditorFind, object: nil)
+                    beginPreviewFind()
+                } else {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        NotificationCenter.default.post(name: .performEditorFind, object: nil)
+                    }
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .zoomInRequested)) { _ in

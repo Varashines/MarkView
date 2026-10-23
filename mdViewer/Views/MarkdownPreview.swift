@@ -6,7 +6,11 @@ struct MarkdownPreview: NSViewRepresentable {
     let text: String
     var documentURL: URL?
     var zoom: Double = 1.0
+    var findQuery: String = ""
+    var findGeneration: Int = 0
+    var findForward: Bool = true
     var onToggleTask: ((Int, Bool) -> Void)?
+    var onFindResult: ((Bool) -> Void)?
 
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -26,18 +30,24 @@ struct MarkdownPreview: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: WKWebView, context: Context) {
+        context.coordinator.parent = self
         context.coordinator.resourceHandler?.baseURL = documentURL?.deletingLastPathComponent()
         if nsView.pageZoom != zoom {
             nsView.pageZoom = zoom
         }
-        guard context.coordinator.lastMarkdownText != text else { return }
+        guard context.coordinator.lastMarkdownText != text else {
+            context.coordinator.applyFind(to: nsView)
+            return
+        }
         if context.coordinator.skipNextLoad {
             context.coordinator.skipNextLoad = false
             context.coordinator.lastMarkdownText = text
+            context.coordinator.applyFind(to: nsView)
             return
         }
         context.coordinator.lastMarkdownText = text
         context.coordinator.loadVersion += 1
+        context.coordinator.resetFind()
         nsView.evaluateJavaScript("window.scrollY") { value, _ in
             if let y = value as? CGFloat {
                 context.coordinator.savedScrollY = y
@@ -60,6 +70,9 @@ struct MarkdownPreview: NSViewRepresentable {
         weak var webView: WKWebView?
         var resourceHandler: DocumentResourceHandler?
         private var restoredVersion: UInt = 0
+        private var lastFindQuery: String?
+        private var lastFindGeneration = -1
+        private var lastFindForward = true
 
         init(parent: MarkdownPreview) {
             self.parent = parent
@@ -89,12 +102,45 @@ struct MarkdownPreview: NSViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            applyFind(to: webView)
             guard loadVersion != restoredVersion else { return }
             restoredVersion = loadVersion
             let y = savedScrollY
             guard y > 0 else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                 webView.evaluateJavaScript("window.scrollTo(0, \(y))")
+            }
+        }
+
+        func resetFind() {
+            lastFindQuery = nil
+            lastFindGeneration = -1
+        }
+
+        func applyFind(to webView: WKWebView) {
+            let query = parent.findQuery
+            if query.isEmpty {
+                if lastFindQuery != nil {
+                    lastFindQuery = nil
+                    lastFindGeneration = -1
+                    webView.find("", configuration: WKFindConfiguration()) { _ in }
+                }
+                return
+            }
+            guard query != lastFindQuery
+                    || parent.findGeneration != lastFindGeneration
+                    || parent.findForward != lastFindForward else {
+                return
+            }
+            lastFindQuery = query
+            lastFindGeneration = parent.findGeneration
+            lastFindForward = parent.findForward
+
+            let configuration = WKFindConfiguration()
+            configuration.backwards = !parent.findForward
+            configuration.wraps = true
+            webView.find(query, configuration: configuration) { [weak self] result in
+                self?.parent.onFindResult?(result.matchFound)
             }
         }
 
