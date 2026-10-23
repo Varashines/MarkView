@@ -544,9 +544,9 @@ enum MarkdownConverter {
             }
         }
         if hasMermaid {
-            if let library = mermaidLibrary() {
+            if let library = peleLibrary() {
                 scripts += "<script>\(library)</script>"
-                scripts += "<script>\(mermaidInitScript())</script>"
+                scripts += "<script>\(peleInitScript())</script>"
             } else {
                 scripts += "<script>window.__contentDone = true;</script>"
             }
@@ -608,15 +608,15 @@ enum MarkdownConverter {
         """
     }
 
-    private static func mermaidLibrary() -> String? {
-        guard let url = Bundle.main.url(forResource: "mermaid.min", withExtension: "js"),
+    private static func peleLibrary() -> String? {
+        guard let url = Bundle.main.url(forResource: "pele.global", withExtension: "js"),
               let js = try? String(contentsOf: url, encoding: .utf8) else {
             return nil
         }
         return js
     }
 
-    private static func mermaidInitScript() -> String {
+    private static func peleInitScript() -> String {
         """
         window.__contentDone = false;
         (function() {
@@ -627,14 +627,20 @@ enum MarkdownConverter {
                     window.webkit.messageHandlers.contentDone.postMessage('');
                 }
             };
-            if (!window.mermaid || !blocks.length) { complete(); return; }
-            var dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            try {
-                mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default' });
-                mermaid.run({ nodes: blocks }).then(complete).catch(complete);
-            } catch (e) {
-                complete();
-            }
+            if (!window.pele || !blocks.length) { complete(); return; }
+            blocks.forEach(function(el) {
+                var source = el.textContent;
+                try {
+                    if (el.clientWidth > 0) {
+                        pele.mount(el, source, { zoom: 'auto' });
+                    } else {
+                        el.innerHTML = pele.render(source, { responsive: true }).svg;
+                    }
+                } catch (e) {
+                    el.textContent = source;
+                }
+            });
+            complete();
         })();
         """
     }

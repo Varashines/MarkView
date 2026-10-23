@@ -124,15 +124,50 @@ hr {
 img { max-width: 100%; box-sizing: border-box; }
 
 .mermaid {
-    display: flex;
-    justify-content: center;
     margin: 0 0 16px;
-    overflow-x: auto;
+    --pele-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    --pele-font-mono: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+    --pele-bg: #ffffff;
+    --pele-fg: #24292e;
+    --pele-muted: #6a737d;
+    --pele-line: #57606a;
+    --pele-surface: #f6f8fa;
+    --pele-surface-alt: #eaeef2;
+    --pele-border: #d0d7de;
+    --pele-accent: #0969da;
+    --pele-radius: 6px;
 }
 
-.mermaid svg {
+.mermaid > svg {
+    display: block;
+    margin: 0 auto;
     max-width: 100%;
     height: auto;
+}
+
+@media (prefers-color-scheme: dark) {
+    .mermaid {
+        --pele-bg: #0d1117;
+        --pele-fg: #c9d1d9;
+        --pele-muted: #8b949e;
+        --pele-line: #c9d1d9;
+        --pele-surface: #161b22;
+        --pele-surface-alt: #21262d;
+        --pele-border: #30363d;
+        --pele-accent: #58a6ff;
+        --pele-series-1: #58a6ff;
+        --pele-series-2: #f0883e;
+        --pele-series-3: #3fb950;
+        --pele-series-4: #f85149;
+        --pele-series-5: #39c5cf;
+        --pele-series-6: #d29922;
+        --pele-series-7: #bc8cff;
+        --pele-series-8: #db6d28;
+    }
+}
+
+@media print {
+    .pele-zoom { display: none !important; }
 }
 
 table {

@@ -16,7 +16,7 @@
 		A10000070000000000000007 /* MarkdownPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000070000000000000008 /* MarkdownPreview.swift */; };
 		A10000080000000000000008 /* Toolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000080000000000000009 /* Toolbar.swift */; };
 		A10000090000000000000009 /* markdown.css in Resources */ = {isa = PBXBuildFile; fileRef = A1000009000000000000000A /* markdown.css */; };
-		A10000310000000000000031 /* mermaid.min.js in Resources */ = {isa = PBXBuildFile; fileRef = A10000300000000000000030 /* mermaid.min.js */; };
+		A10000310000000000000031 /* pele.global.js in Resources */ = {isa = PBXBuildFile; fileRef = A10000300000000000000030 /* pele.global.js */; };
 		A10000330000000000000033 /* DocumentResourceHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000320000000000000032 /* DocumentResourceHandler.swift */; };
 		A10000350000000000000035 /* highlight.min.js in Resources */ = {isa = PBXBuildFile; fileRef = A10000340000000000000034 /* highlight.min.js */; };
 		A10000370000000000000037 /* github.min.css in Resources */ = {isa = PBXBuildFile; fileRef = A10000360000000000000036 /* github.min.css */; };
@@ -42,7 +42,7 @@
 		A10000070000000000000008 /* MarkdownPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownPreview.swift; sourceTree = "<group>"; };
 		A10000080000000000000009 /* Toolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Toolbar.swift; sourceTree = "<group>"; };
 		A1000009000000000000000A /* markdown.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = markdown.css; sourceTree = "<group>"; };
-		A10000300000000000000030 /* mermaid.min.js */ = {isa = PBXFileReference; lastKnownFileType = text.javascript; path = mermaid.min.js; sourceTree = "<group>"; };
+		A10000300000000000000030 /* pele.global.js */ = {isa = PBXFileReference; lastKnownFileType = text.javascript; path = pele.global.js; sourceTree = "<group>"; };
 		A10000320000000000000032 /* DocumentResourceHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentResourceHandler.swift; sourceTree = "<group>"; };
 		A10000340000000000000034 /* highlight.min.js */ = {isa = PBXFileReference; lastKnownFileType = text.javascript; path = highlight.min.js; sourceTree = "<group>"; };
 		A10000360000000000000036 /* github.min.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = github.min.css; sourceTree = "<group>"; };
@@ -122,7 +122,7 @@
 			isa = PBXGroup;
 			children = (
 				A1000009000000000000000A /* markdown.css */,
-				A10000300000000000000030 /* mermaid.min.js */,
+				A10000300000000000000030 /* pele.global.js */,
 				A10000340000000000000034 /* highlight.min.js */,
 				A10000360000000000000036 /* github.min.css */,
 				A10000380000000000000038 /* github-dark.min.css */,
@@ -193,7 +193,7 @@
 			files = (
 				A10000090000000000000009 /* markdown.css in Resources */,
 				A10000210000000000000021 /* Assets.xcassets in Resources */,
-				A10000310000000000000031 /* mermaid.min.js in Resources */,
+				A10000310000000000000031 /* pele.global.js in Resources */,
 				A10000350000000000000035 /* highlight.min.js in Resources */,
 				A10000370000000000000037 /* github.min.css in Resources */,
 				A10000390000000000000039 /* github-dark.min.css in Resources */,
