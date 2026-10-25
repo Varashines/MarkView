@@ -39,11 +39,8 @@ struct mdViewerApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        Window("MarkView", id: "main") {
             ContentView()
-                .onOpenURL { url in
-                    postOpen(url)
-                }
         }
         .windowToolbarStyle(.unified(showsTitle: false))
         .commands {
