@@ -252,6 +252,7 @@ img { max-width: 100%; box-sizing: border-box; }
     --pele-surface-alt: #eaeef2;
     --pele-border: #d0d7de;
     --pele-accent: #0969da;
+    --pele-error: #cf222e;
     --pele-radius: 6px;
 }
 
@@ -272,6 +273,7 @@ img { max-width: 100%; box-sizing: border-box; }
         --pele-surface-alt: #21262d;
         --pele-border: #30363d;
         --pele-accent: #58a6ff;
+        --pele-error: #f85149;
         --pele-series-1: #58a6ff;
         --pele-series-2: #f0883e;
         --pele-series-3: #3fb950;

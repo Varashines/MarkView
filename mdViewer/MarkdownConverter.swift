@@ -177,7 +177,13 @@ enum MarkdownConverter {
         let hasMermaid = body.contains("<div class=\"mermaid\">")
         let hasCode = body.contains("<pre")
         let hasMath = !mathItems.isEmpty || footnotes.values.contains { $0.text.contains("$") }
-        let scripts = Self.scripts(hasMermaid: hasMermaid, hasCode: hasCode, hasMath: hasMath)
+        let hasDiagramMath = hasMermaid && body.contains("$$")
+        let scripts = Self.scripts(
+            hasMermaid: hasMermaid,
+            hasCode: hasCode,
+            hasMath: hasMath,
+            hasDiagramMath: hasDiagramMath
+        )
         let styleContent: String
         if hasMath {
             styleContent = css() + (exportMode ? exportedKatexCss() : katexCss())
@@ -757,17 +763,24 @@ enum MarkdownConverter {
         return css
     }
 
-    private static func scripts(hasMermaid: Bool, hasCode: Bool, hasMath: Bool) -> String {
+    private static func scripts(
+        hasMermaid: Bool,
+        hasCode: Bool,
+        hasMath: Bool,
+        hasDiagramMath: Bool
+    ) -> String {
         var scripts = "<script>\(script())</script>"
         if hasCode, let library = highlightLibrary() {
             scripts += "<script>\(library)</script>"
             scripts += "<script>\(highlightInitScript())</script>"
         }
-        if hasMath {
+        if hasMath || hasDiagramMath {
             if let library = katexLibrary() {
                 scripts += "<script>\(library)</script>"
-                scripts += "<script>\(mathInitScript())</script>"
-            } else {
+                if hasMath {
+                    scripts += "<script>\(mathInitScript())</script>"
+                }
+            } else if hasMath {
                 scripts += "<script>window.__contentDone = true;</script>"
             }
         }
@@ -856,13 +869,39 @@ enum MarkdownConverter {
                 }
             };
             if (!window.pele || !blocks.length) { complete(); return; }
+            var math = (function() {
+                if (!window.katex) { return undefined; }
+                var probe = document.createElement('div');
+                probe.style.cssText = 'position:absolute;left:-9999px;top:0;visibility:hidden;display:inline-block;white-space:nowrap';
+                document.body.appendChild(probe);
+                return function(tex, size) {
+                    try {
+                        probe.style.fontSize = size + 'px';
+                        probe.innerHTML = katex.renderToString(tex, {
+                            displayMode: true,
+                            output: 'mathml'
+                        });
+                        var expression = probe.querySelector('math');
+                        if (!expression) { return null; }
+                        var rect = expression.getBoundingClientRect();
+                        if (!rect.width || !rect.height) { return null; }
+                        return {
+                            html: expression.outerHTML,
+                            width: rect.width,
+                            height: rect.height
+                        };
+                    } catch (e) {
+                        return null;
+                    }
+                };
+            })();
             blocks.forEach(function(el) {
                 var source = el.textContent;
                 try {
                     if (el.clientWidth > 0) {
-                        pele.mount(el, source, { zoom: 'auto' });
+                        pele.mount(el, source, { zoom: 'auto', math: math });
                     } else {
-                        el.innerHTML = pele.render(source, { responsive: true }).svg;
+                        el.innerHTML = pele.render(source, { responsive: true, math: math }).svg;
                     }
                 } catch (e) {
                     el.textContent = source;
