@@ -139,6 +139,7 @@ private func postOpen(_ url: URL) {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static var pendingOpenURLs: [URL] = []
+    private static var didHandleOpenRequest = false
 
     func application(_ application: NSApplication, open urls: [URL]) {
         AppDelegate.pendingOpenURLs.append(contentsOf: urls)
@@ -148,6 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     static func markHandled(_ url: URL) {
+        didHandleOpenRequest = true
         pendingOpenURLs.removeAll {
             $0.standardizedFileURL == url.standardizedFileURL
         }
@@ -157,6 +159,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let urls = pendingOpenURLs
         pendingOpenURLs.removeAll()
         return urls
+    }
+
+    static func consumeHandledOpenRequest() -> Bool {
+        let handled = didHandleOpenRequest
+        didHandleOpenRequest = false
+        return handled
     }
 }
 

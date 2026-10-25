@@ -396,15 +396,28 @@ struct ContentView: View {
             return
         }
 
-        let pending = AppDelegate.consumePendingOpenURLs()
-        if !pending.isEmpty {
-            for url in pending {
-                open(url: url)
-            }
+        if applyPendingOpenURLs() {
             return
         }
 
-        restoreLastSession()
+        // Finder may deliver its open request just after the window appears.
+        // Give it a moment so a single file does not get replaced by the last session.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            if applyPendingOpenURLs() { return }
+            if AppDelegate.consumeHandledOpenRequest() { return }
+            restoreLastSession()
+        }
+    }
+
+    private func applyPendingOpenURLs() -> Bool {
+        let pending = AppDelegate.consumePendingOpenURLs()
+        guard !pending.isEmpty else { return false }
+        _ = AppDelegate.consumeHandledOpenRequest()
+        for url in pending {
+            open(url: url)
+        }
+        return true
     }
 
     private func open(url: URL) {
