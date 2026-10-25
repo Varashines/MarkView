@@ -64,6 +64,8 @@ jobs:
             -configuration Release \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
+            ARCHS="arm64 x86_64" \
+            ONLY_ACTIVE_ARCH=NO \
             MARKETING_VERSION="${{ steps.version.outputs.value }}" \
             CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}" \
             build
@@ -81,6 +83,14 @@ jobs:
           test -f "$APP/Contents/Resources/markdown.css"
           /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist"
 
+      - name: Generate and install app icon
+        run: |
+          swift generate_icon.swift
+          iconutil -c icns AppIcon.iconset -o AppIcon.icns
+          cp AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+          /usr/libexec/PlistBuddy -c "Delete :CFBundleIconFile" "$APP/Contents/Info.plist" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon.icns" "$APP/Contents/Info.plist"
+
       - name: Ad-hoc sign and verify
         run: |
           codesign --force --deep --sign - \
@@ -88,19 +98,47 @@ jobs:
             "$APP"
           codesign --verify --deep --strict "$APP"
 
-      - name: Package artifacts
+      - name: Package DMG
         run: |
-          ditto -c -k --keepParent "$APP" MarkView.zip
-          hdiutil create -volname "MarkView" -srcfolder "$APP" -ov -format UDZO MarkView.dmg
-          ls -lh MarkView.zip MarkView.dmg
+          VERSION="${{ steps.version.outputs.value }}"
+          STAGE="dmg-stage"
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE"
+          cp -R "$APP" "$STAGE/"
+          ln -s /Applications "$STAGE/Applications"
+
+          hdiutil create -volname "MarkView" -srcfolder "$STAGE" -ov -format UDRW -fs HFS+ MarkView-rw.dmg
+          MOUNT_DIR="/Volumes/MarkView"
+          hdiutil attach MarkView-rw.dmg -nobrowse -readwrite -mountpoint "$MOUNT_DIR"
+          cp AppIcon.icns "$MOUNT_DIR/.VolumeIcon.icns"
+          if command -v SetFile >/dev/null 2>&1; then
+            SetFile -a C "$MOUNT_DIR"
+          fi
+          sync
+          hdiutil detach "$MOUNT_DIR" -quiet
+
+          hdiutil convert MarkView-rw.dmg -format UDZO -imagekey zlib-level=9 -o "MarkView-$VERSION.dmg"
+          rm -f MarkView-rw.dmg
+          ls -lh "MarkView-$VERSION.dmg"
+
+      - name: Verify DMG
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          DMG="MarkView-$VERSION.dmg"
+          hdiutil verify "$DMG"
+          MOUNT_DIR="/Volumes/MarkView"
+          hdiutil attach "$DMG" -nobrowse -readonly -mountpoint "$MOUNT_DIR"
+          test -d "$MOUNT_DIR/MarkView.app"
+          test -L "$MOUNT_DIR/Applications"
+          test -f "$MOUNT_DIR/.VolumeIcon.icns"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIconFile" "$MOUNT_DIR/MarkView.app/Contents/Info.plist"
+          hdiutil detach "$MOUNT_DIR" -quiet
 
       - name: Upload app artifact
         uses: actions/upload-artifact@v4
         with:
           name: MarkView-${{ steps.version.outputs.value }}
-          path: |
-            MarkView.zip
-            MarkView.dmg
+          path: MarkView-${{ steps.version.outputs.value }}.dmg
           if-no-files-found: error
           retention-days: 30
 
@@ -111,9 +149,7 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: MarkView ${{ steps.version.outputs.value }}
           target_commitish: ${{ github.sha }}
-          files: |
-            MarkView.zip
-            MarkView.dmg
+          files: MarkView-${{ steps.version.outputs.value }}.dmg
           generate_release_notes: true
           draft: false
           prerelease: false
