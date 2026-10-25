@@ -392,15 +392,28 @@ struct ContentView: View {
     private func handleLaunch() {
         store.onFileOpened = {}
         if let path = CommandLine.arguments.dropFirst().first {
-            let url = URL(fileURLWithPath: path)
-            var isDirectory: ObjCBool = false
-            if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue {
-                store.openFolder(at: url)
-            } else {
-                store.openFile(at: url)
+            open(url: URL(fileURLWithPath: path))
+            return
+        }
+
+        let pending = AppDelegate.consumePendingOpenURLs()
+        if !pending.isEmpty {
+            for url in pending {
+                open(url: url)
             }
+            return
+        }
+
+        restoreLastSession()
+    }
+
+    private func open(url: URL) {
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+           isDirectory.boolValue {
+            store.openFolder(at: url)
         } else {
-            restoreLastSession()
+            store.openFile(at: url)
         }
     }
 
@@ -526,11 +539,13 @@ private struct AppCommandHandlers: ViewModifier {
         content
             .onReceive(NotificationCenter.default.publisher(for: .openFileURL)) { notification in
                 if let url = notification.object as? URL {
+                    AppDelegate.markHandled(url)
                     store.openFile(at: url)
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .openFolderURL)) { notification in
                 if let url = notification.object as? URL {
+                    AppDelegate.markHandled(url)
                     store.openFolder(at: url)
                 }
             }
