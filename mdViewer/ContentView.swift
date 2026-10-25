@@ -519,6 +519,10 @@ private struct AppCommandHandlers: ViewModifier {
     let toggleSplit: () -> Void
 
     func body(content: Content) -> some View {
+        viewHandlers(exportHandlers(fileHandlers(content)))
+    }
+
+    private func fileHandlers<V: View>(_ content: V) -> some View {
         content
             .onReceive(NotificationCenter.default.publisher(for: .openFileURL)) { notification in
                 if let url = notification.object as? URL {
@@ -554,15 +558,23 @@ private struct AppCommandHandlers: ViewModifier {
             .onReceive(NotificationCenter.default.publisher(for: .reloadFromDiskRequested)) { _ in
                 store.reloadFromDisk()
             }
-        .onReceive(NotificationCenter.default.publisher(for: .exportPDFRequested)) { _ in
-            exportPDF(false)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .exportSinglePagePDFRequested)) { _ in
-            exportPDF(true)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .exportHTMLRequested)) { _ in
-            exportHTML()
-        }
+    }
+
+    private func exportHandlers<V: View>(_ content: V) -> some View {
+        content
+            .onReceive(NotificationCenter.default.publisher(for: .exportPDFRequested)) { _ in
+                exportPDF(false)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .exportSinglePagePDFRequested)) { _ in
+                exportPDF(true)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .exportHTMLRequested)) { _ in
+                exportHTML()
+            }
+    }
+
+    private func viewHandlers<V: View>(_ content: V) -> some View {
+        content
             .onReceive(NotificationCenter.default.publisher(for: .toggleSidebarRequested)) { _ in
                 withAnimation(.easeInOut(duration: 0.15)) {
                     columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
