@@ -431,13 +431,24 @@ struct ContentView: View {
     }
 
     private func restoreLastSession() {
-        if let folder = RecentItems.lastFolder(),
+        let mode = RecentItems.lastWorkspaceMode()
+
+        if mode == .folder,
+           let folder = RecentItems.lastFolder(),
            FileManager.default.fileExists(atPath: folder.path) {
             store.openFolder(at: folder)
+            return
         }
+
         if let file = RecentItems.lastFile(),
            FileManager.default.fileExists(atPath: file.path) {
             store.openFile(at: file)
+            return
+        }
+
+        if let folder = RecentItems.lastFolder(),
+           FileManager.default.fileExists(atPath: folder.path) {
+            store.openFolder(at: folder)
         }
     }
 
@@ -527,6 +538,18 @@ private struct AppCommandHandlers: ViewModifier {
             }
             .onReceive(NotificationCenter.default.publisher(for: .saveRequested)) { _ in
                 store.save()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .newFileRequested)) { _ in
+                store.createFile()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .closeFolderRequested)) { _ in
+                store.closeFolder()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .focusSidebarSearchRequested)) { _ in
+                guard store.folderURL != nil else { return }
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    columnVisibility = .all
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: .reloadFromDiskRequested)) { _ in
                 store.reloadFromDisk()

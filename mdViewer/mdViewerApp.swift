@@ -42,21 +42,22 @@ struct mdViewerApp: App {
         WindowGroup {
             ContentView()
                 .onOpenURL { url in
-                    NotificationCenter.default.post(
-                        name: .openFileURL,
-                        object: url
-                    )
+                    postOpen(url)
                 }
         }
         .windowToolbarStyle(.unified(showsTitle: false))
         .commands {
-            CommandGroup(replacing: .newItem) { }
+            CommandGroup(replacing: .newItem) {
+                Button("New File") { post(.newFileRequested) }
+                    .keyboardShortcut("n")
+            }
 
             CommandGroup(after: .newItem) {
                 Button("Open…") { post(.openFileRequested) }
                     .keyboardShortcut("o")
                 Button("Open Folder…") { post(.openFolderRequested) }
                     .keyboardShortcut("o", modifiers: [.command, .shift])
+                Button("Close Folder") { post(.closeFolderRequested) }
                 Divider()
                 Button("Save") { post(.saveRequested) }
                     .keyboardShortcut("s")
@@ -115,6 +116,8 @@ struct mdViewerApp: App {
             CommandGroup(after: .textEditing) {
                 Button("Find…") { post(.findRequested) }
                     .keyboardShortcut("f")
+                Button("Search Files…") { post(.focusSidebarSearchRequested) }
+                    .keyboardShortcut("f", modifiers: [.command, .shift])
             }
         }
     }
@@ -124,13 +127,20 @@ private func post(_ name: Notification.Name) {
     NotificationCenter.default.post(name: name, object: nil)
 }
 
+private func postOpen(_ url: URL) {
+    var isDirectory: ObjCBool = false
+    if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+       isDirectory.boolValue {
+        NotificationCenter.default.post(name: .openFolderURL, object: url)
+    } else {
+        NotificationCenter.default.post(name: .openFileURL, object: url)
+    }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls {
-            NotificationCenter.default.post(
-                name: .openFileURL,
-                object: url
-            )
+            postOpen(url)
         }
     }
 }
@@ -140,6 +150,9 @@ extension Notification.Name {
     static let openFolderURL = Notification.Name("openFolderURL")
     static let openFileRequested = Notification.Name("openFileRequested")
     static let openFolderRequested = Notification.Name("openFolderRequested")
+    static let newFileRequested = Notification.Name("newFileRequested")
+    static let closeFolderRequested = Notification.Name("closeFolderRequested")
+    static let focusSidebarSearchRequested = Notification.Name("focusSidebarSearchRequested")
     static let saveRequested = Notification.Name("saveRequested")
     static let reloadFromDiskRequested = Notification.Name("reloadFromDiskRequested")
     static let exportPDFRequested = Notification.Name("exportPDFRequested")
