@@ -553,7 +553,13 @@ final class DocumentStore: ObservableObject {
     func openFile(at url: URL) {
         let standardized = url.standardizedFileURL
         do {
-            text = try String(contentsOf: standardized, encoding: .utf8)
+            let contents = try String(contentsOf: standardized, encoding: .utf8)
+
+            if let folder = folderURL, !standardized.isDescendant(of: folder) {
+                closeFolder()
+            }
+
+            text = contents
             fileURL = standardized
             isDirty = false
             hasExternalConflict = false
