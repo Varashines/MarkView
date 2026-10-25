@@ -563,7 +563,7 @@ final class DocumentStore: ObservableObject {
             if folderURL == nil {
                 workspaceMode = .file
                 RecentItems.setLastWorkspaceMode(.file)
-            } else {
+            } else if let folder = folderURL, standardized.isDescendant(of: folder) {
                 setLastFile(standardized)
                 sidebarTargetFolder = standardized.deletingLastPathComponent()
                 expandAncestors(of: standardized)
@@ -605,11 +605,10 @@ final class DocumentStore: ObservableObject {
     }
 
     func createFile(in directory: URL? = nil) {
-        guard let folder = directory ?? sidebarTargetFolder ?? folderURL else {
+        guard let target = directory ?? sidebarTargetFolder ?? folderURL else {
             status = "Open a folder to create a file"
             return
         }
-        let target = folder.hasDirectoryPath ? folder : folder.deletingLastPathComponent()
         let url = uniqueFileURL(in: target, baseName: "Untitled", fileExtension: "md")
         do {
             try "".write(to: url, atomically: true, encoding: .utf8)
@@ -849,7 +848,7 @@ final class DocumentStore: ObservableObject {
         if folderURL == nil {
             workspaceMode = .file
             RecentItems.setLastWorkspaceMode(.file)
-        } else {
+        } else if let folder = folderURL, url.isDescendant(of: folder) {
             setLastFile(url)
             sidebarTargetFolder = url.deletingLastPathComponent()
             expandAncestors(of: url)
